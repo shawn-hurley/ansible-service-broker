@@ -8,8 +8,8 @@ import (
 
 	schema "github.com/lestrrat/go-jsschema"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
-	sdk "github.com/openshift/ansible-service-broker/service-broker-generic/servicebroker/broker"
 	"github.com/pborman/uuid"
+	sdk "github.com/shawn-hurley/service-broker-generic/servicebroker/broker"
 )
 
 func ProjectRoot() string {

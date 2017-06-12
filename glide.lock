@@ -1,5 +1,5 @@
-hash: d7f48cd6bdc1bdf25f4bce6c1010ee0144c22b93fd400da8810b920a27cc8522
-updated: 2017-06-08T02:01:48.998404392-04:00
+hash: b4411d4dde80e7dbffc2019680a7292965e6dd1911b7206c8b6c8c3f4ac4c394
+updated: 2017-06-12T14:59:23.81599836-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 70b2c90b260171e829f1ebd7c17f600c11858dbe
@@ -61,7 +61,7 @@ imports:
   - storage
   - storageversion
 - name: github.com/coreos/etcd
-  version: 9d7ed0e63a4e9907c04396d0a9a7a01ba08d2852
+  version: 66722b1ada68fcd5227db853ee92003169a975c8
   subpackages:
   - client
   - pkg/pathutil
@@ -219,10 +219,22 @@ imports:
 - name: github.com/opencontainers/runc
   version: 45c30e75abfd52107b53048004a83165403ad0d1
   subpackages:
+  - libcontainer
+  - libcontainer/apparmor
+  - libcontainer/cgroups
+  - libcontainer/cgroups/fs
+  - libcontainer/cgroups/systemd
+  - libcontainer/configs
+  - libcontainer/configs/validate
+  - libcontainer/criurpc
+  - libcontainer/keys
   - libcontainer/label
+  - libcontainer/seccomp
   - libcontainer/selinux
+  - libcontainer/stacktrace
   - libcontainer/system
   - libcontainer/user
+  - libcontainer/utils
 - name: github.com/pborman/uuid
   version: a97ce2ca70fa5a848076093f05e639a89ca34d06
 - name: github.com/pkg/errors
@@ -231,6 +243,11 @@ imports:
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
   version: 5bd2802263f21d8788851d5305584c82a5c75d7e
+- name: github.com/shawn-hurley/service-broker-generic
+  version: 253ec5ebf071d3da326531464be8c504030e32d9
+  subpackages:
+  - servicebroker
+  - servicebroker/broker
 - name: github.com/Sirupsen/logrus
   version: 0208149b40d863d2c1a2f8fe5753096a9cf2cc8b
 - name: github.com/spf13/pflag

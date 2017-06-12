@@ -12,7 +12,7 @@ import (
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/openshift/ansible-service-broker/pkg/broker"
 	"github.com/openshift/ansible-service-broker/pkg/dao"
-	newHandler "github.com/openshift/ansible-service-broker/service-broker-generic/servicebroker"
+	newHandler "github.com/shawn-hurley/service-broker-generic/servicebroker"
 )
 
 const MsgBufferSize = 20

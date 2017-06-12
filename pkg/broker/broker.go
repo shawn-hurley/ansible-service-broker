@@ -11,8 +11,8 @@ import (
 	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/openshift/ansible-service-broker/pkg/dao"
-	sdk "github.com/openshift/ansible-service-broker/service-broker-generic/servicebroker/broker"
 	"github.com/pborman/uuid"
+	sdk "github.com/shawn-hurley/service-broker-generic/servicebroker/broker"
 )
 
 var (

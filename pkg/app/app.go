@@ -12,7 +12,7 @@ import (
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/openshift/ansible-service-broker/pkg/broker"
 	"github.com/openshift/ansible-service-broker/pkg/dao"
-	"github.com/openshift/ansible-service-broker/pkg/handler"
+	newHandler "github.com/openshift/ansible-service-broker/service-broker-generic/servicebroker"
 )
 
 const MsgBufferSize = 20
@@ -135,7 +135,10 @@ func (a *App) Start() {
 	a.log.Notice("Ansible Service Broker Started")
 	listeningAddress := "0.0.0.0:1338"
 	a.log.Notice("Listening on http://%s", listeningAddress)
-	err := http.ListenAndServe(":1338", handler.NewHandler(a.broker, a.log.Logger, a.config.DevBroker))
+	authFunc := func(username, password string) bool {
+		return true
+	}
+	err := http.ListenAndServe(":1338", newHandler.NewServiceBrokerHandler(a.broker, authFunc))
 	if err != nil {
 		a.log.Error("Failed to start HTTP server")
 		a.log.Error(err.Error())

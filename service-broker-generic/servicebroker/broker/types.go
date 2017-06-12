@@ -2,7 +2,6 @@ package broker
 
 import (
 	schema "github.com/lestrrat/go-jsschema"
-	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/pborman/uuid"
 )
 
@@ -31,7 +30,7 @@ type Plan struct {
 	Description string                 `json:"description"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 	Free        bool                   `json:"free,omitempty"`
-	Bindable    bool                   `json:"bindable,omitempty"`
+	Bindable    bool                   `json:"bindable"`
 	Schemas     Schema                 `json:"schemas,omitempty"`
 }
 
@@ -76,12 +75,12 @@ type LastOperationResponse struct {
 }
 
 type ProvisionRequest struct {
-	OrganizationID    uuid.UUID      `json:"organization_guid"`
-	PlanID            uuid.UUID      `json:"plan_id"`
-	ServiceID         uuid.UUID      `json:"service_id"`
-	SpaceID           uuid.UUID      `json:"space_guid"`
-	Parameters        apb.Parameters `json:"parameters,omitempty"`
-	AcceptsIncomplete bool           `json:"accepts_incomplete,omitempty"`
+	OrganizationID    uuid.UUID              `json:"organization_guid"`
+	PlanID            uuid.UUID              `json:"plan_id"`
+	ServiceID         uuid.UUID              `json:"service_id"`
+	SpaceID           uuid.UUID              `json:"space_guid"`
+	Parameters        map[string]interface{} `json:"parameters,omitempty"`
+	AcceptsIncomplete bool                   `json:"accepts_incomplete,omitempty"`
 }
 
 type ProvisionResponse struct {
@@ -90,9 +89,9 @@ type ProvisionResponse struct {
 }
 
 type UpdateRequest struct {
-	ServiceID      uuid.UUID         `json:"service_id"`
-	PlanID         uuid.UUID         `json:"plan_id,omitempty"`
-	Parameters     map[string]string `json:"parameters,omitempty"`
+	ServiceID      uuid.UUID              `json:"service_id"`
+	PlanID         uuid.UUID              `json:"plan_id,omitempty"`
+	Parameters     map[string]interface{} `json:"parameters,omitempty"`
 	PreviousValues struct {
 		PlanID         uuid.UUID `json:"plan_id,omitempty"`
 		ServiceID      uuid.UUID `json:"service_id,omitempty"`
@@ -116,7 +115,7 @@ type BindRequest struct {
 		AppID uuid.UUID `json:"app_guid,omitempty"`
 		Route string    `json:"route,omitempty"`
 	} `json:"bind_resource,omitempty"`
-	Parameters apb.Parameters `json:"parameters,omitempty"`
+	Parameters map[string]string `json:"parameters,omitempty"`
 }
 
 type BindResponse struct {
@@ -139,4 +138,9 @@ type ErrorResponse struct {
 type BootstrapResponse struct {
 	SpecCount  int `json:"spec_count"`
 	ImageCount int `json:"image_count"`
+}
+
+// Config - will
+type Config struct {
+	Version string
 }

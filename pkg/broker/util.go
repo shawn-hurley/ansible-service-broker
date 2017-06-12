@@ -8,6 +8,7 @@ import (
 
 	schema "github.com/lestrrat/go-jsschema"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
+	sdk "github.com/openshift/ansible-service-broker/service-broker-generic/servicebroker/broker"
 	"github.com/pborman/uuid"
 )
 
@@ -20,9 +21,9 @@ func ProjectRoot() string {
 
 // SpecToService converts an apb Spec into a Service usable by the service
 // catalog.
-func SpecToService(spec *apb.Spec) Service {
+func SpecToService(spec *apb.Spec) sdk.Service {
 	// default plan, used to be in hack.go
-	plans := []Plan{
+	plans := []sdk.Plan{
 		{
 			ID:          uuid.Parse("4c10ff42-be89-420a-9bab-27a9bef9aed8"),
 			Name:        "default",
@@ -33,7 +34,7 @@ func SpecToService(spec *apb.Spec) Service {
 		},
 	}
 
-	retSvc := Service{
+	retSvc := sdk.Service{
 		ID:          uuid.Parse(spec.Id),
 		Name:        spec.Name,
 		Description: spec.Description,
@@ -69,7 +70,7 @@ func getType(paramType string) schema.PrimitiveTypes {
 }
 
 // ParametersToSchema converts the apb parameters into a JSON Schema format.
-func ParametersToSchema(params []map[string]*apb.ParameterDescriptor, required []string) Schema {
+func ParametersToSchema(params []map[string]*apb.ParameterDescriptor, required []string) sdk.Schema {
 	properties := make(map[string]*schema.Schema)
 
 	var patternRegex *regexp.Regexp
@@ -113,8 +114,8 @@ func ParametersToSchema(params []map[string]*apb.ParameterDescriptor, required [
 	}
 
 	// builds a Schema object for the various methods.
-	s := Schema{
-		ServiceInstance: ServiceInstance{
+	s := sdk.Schema{
+		ServiceInstance: sdk.ServiceInstance{
 			Create: map[string]*schema.Schema{
 				"parameters": {
 					SchemaRef:  schema.SchemaURL,
@@ -125,7 +126,7 @@ func ParametersToSchema(params []map[string]*apb.ParameterDescriptor, required [
 			},
 			Update: map[string]*schema.Schema{},
 		},
-		ServiceBinding: ServiceBinding{
+		ServiceBinding: sdk.ServiceBinding{
 			Create: map[string]*schema.Schema{
 				"parameters": {
 					SchemaRef:  schema.SchemaURL,
@@ -140,15 +141,15 @@ func ParametersToSchema(params []map[string]*apb.ParameterDescriptor, required [
 }
 
 // StateToLastOperation converts apb State objects into LastOperationStates.
-func StateToLastOperation(state apb.State) LastOperationState {
+func StateToLastOperation(state apb.State) sdk.LastOperationState {
 	switch state {
 	case apb.StateInProgress:
-		return LastOperationStateInProgress
+		return sdk.LastOperationStateInProgress
 	case apb.StateSucceeded:
-		return LastOperationStateSucceeded
+		return sdk.LastOperationStateSucceeded
 	case apb.StateFailed:
-		return LastOperationStateFailed
+		return sdk.LastOperationStateFailed
 	default:
-		return LastOperationStateFailed
+		return sdk.LastOperationStateFailed
 	}
 }

@@ -11,6 +11,7 @@ import (
 	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/openshift/ansible-service-broker/pkg/dao"
+	sdk "github.com/openshift/ansible-service-broker/service-broker-generic/servicebroker/broker"
 	"github.com/pborman/uuid"
 )
 
@@ -23,16 +24,8 @@ var (
 	ErrorNotFound = errors.New("not found")
 )
 
-// Broker - A broker is used to to compelete all the tasks that a broker must be able to do.
-type Broker interface {
-	Bootstrap() (*BootstrapResponse, error)
-	Catalog() (*CatalogResponse, error)
-	Provision(uuid.UUID, *ProvisionRequest, bool) (*ProvisionResponse, error)
-	Update(uuid.UUID, *UpdateRequest) (*UpdateResponse, error)
-	Deprovision(uuid.UUID) (*DeprovisionResponse, error)
-	Bind(uuid.UUID, uuid.UUID, *BindRequest) (*BindResponse, error)
-	Unbind(uuid.UUID, uuid.UUID) error
-	LastOperation(uuid.UUID, *LastOperationRequest) (*LastOperationResponse, error)
+type DevBroker interface {
+	AddSpec(spec apb.Spec) (*sdk.CatalogResponse, error)
 }
 
 // AnsibleBroker - Broker using ansible and images to interact with oc/kubernetes/etcd
@@ -91,7 +84,7 @@ func (a AnsibleBroker) Login() error {
 // Potentially a large download; on the order of 10s of thousands
 // TODO: Response here? Async?
 // TODO: How do we handle a large amount of data on this side as well? Pagination?
-func (a AnsibleBroker) Bootstrap() (*BootstrapResponse, error) {
+func (a AnsibleBroker) Bootstrap() (*sdk.BootstrapResponse, error) {
 	a.log.Info("AnsibleBroker::Bootstrap")
 	var err error
 	var specs []*apb.Spec
@@ -105,34 +98,32 @@ func (a AnsibleBroker) Bootstrap() (*BootstrapResponse, error) {
 		return nil, err
 	}
 
-	return &BootstrapResponse{SpecCount: len(specs), ImageCount: imageCount}, nil
+	return &sdk.BootstrapResponse{SpecCount: len(specs), ImageCount: imageCount}, nil
 }
 
 // Catalog - returns the catalog of services defined
-func (a AnsibleBroker) Catalog() (*CatalogResponse, error) {
+func (a AnsibleBroker) Catalog() (*sdk.CatalogResponse, error) {
 	a.log.Info("AnsibleBroker::Catalog")
 
-	var specs []*apb.Spec
-	var err error
-	var services []Service
 	dir := "/spec"
 
-	if specs, err = a.dao.BatchGetSpecs(dir); err != nil {
+	specs, err := a.dao.BatchGetSpecs(dir)
+	if err != nil {
 		a.log.Error("Something went real bad trying to retrieve batch specs...")
 		return nil, err
 	}
 
-	services = make([]Service, len(specs))
+	services := make([]sdk.Service, len(specs))
 	for i, spec := range specs {
 		services[i] = SpecToService(spec)
 	}
 
-	return &CatalogResponse{services}, nil
+	return &sdk.CatalogResponse{services}, nil
 }
 
 // Provision  - will provision a service
-func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, async bool) (*ProvisionResponse, error) {
-	////////////////////////////////////////////////////////////
+func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *sdk.ProvisionRequest, async bool) (*sdk.ProvisionResponse, error) {
+	/////////////////////////////////////////////&///////////////
 	//type ProvisionRequest struct {
 
 	//-> OrganizationID    uuid.UUID
@@ -213,13 +204,13 @@ func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, 
 		return nil, err
 	}
 
-	parameters := &req.Parameters
+	parameters := apb.Parameters(req.Parameters)
 
 	// Build and persist record of service instance
 	serviceInstance := &apb.ServiceInstance{
 		Id:         instanceUUID,
 		Spec:       spec,
-		Parameters: parameters,
+		Parameters: &parameters,
 	}
 
 	// Verify we're not reprovisioning the same instance
@@ -233,7 +224,7 @@ func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, 
 		if uuid.Equal(si.Id, serviceInstance.Id) {
 			if reflect.DeepEqual(si.Parameters, serviceInstance.Parameters) {
 				a.log.Debug("already have this instance returning 200")
-				return &ProvisionResponse{}, ErrorAlreadyProvisioned
+				return &sdk.ProvisionResponse{}, ErrorAlreadyProvisioned
 			}
 			a.log.Info("we have a duplicate instance with parameters that differ, returning 409 conflict")
 			return nil, ErrorDuplicate
@@ -252,7 +243,7 @@ func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, 
 	if async {
 		a.log.Info("ASYNC provisioning in progress")
 		// asyncronously provision and return the token for the lastoperation
-		pjob := NewProvisionJob(instanceUUID, spec, parameters, a.clusterConfig, a.log)
+		pjob := NewProvisionJob(instanceUUID, spec, &parameters, a.clusterConfig, a.log)
 
 		token = a.engine.StartNewJob(pjob)
 
@@ -262,7 +253,7 @@ func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, 
 	} else {
 		// TODO: do we want to do synchronous provisioning?
 		a.log.Info("reverting to synchronous provisioning in progress")
-		extCreds, err := apb.Provision(spec, parameters, a.clusterConfig, a.log)
+		extCreds, err := apb.Provision(spec, &parameters, a.clusterConfig, a.log)
 		if err != nil {
 			a.log.Error("broker::Provision error occurred.")
 			a.log.Error("%s", err.Error())
@@ -283,11 +274,11 @@ func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, 
 	// TODO: What data needs to be sent back on a respone?
 	// Not clear what dashboardURL means in an AnsibleApp context
 	// operation should be the task id from the work_engine
-	return &ProvisionResponse{Operation: token}, nil
+	return &sdk.ProvisionResponse{Operation: token}, nil
 }
 
 // Deprovision - will deprovision a service.
-func (a AnsibleBroker) Deprovision(instanceUUID uuid.UUID) (*DeprovisionResponse, error) {
+func (a AnsibleBroker) Deprovision(instanceUUID uuid.UUID) (*sdk.DeprovisionResponse, error) {
 	////////////////////////////////////////////////////////////
 	// Deprovision flow
 	// -> Lookup bindings by instance ID; 400 if any are active, related issue:
@@ -328,7 +319,7 @@ func (a AnsibleBroker) Deprovision(instanceUUID uuid.UUID) (*DeprovisionResponse
 
 	a.dao.DeleteServiceInstance(instanceID)
 
-	return &DeprovisionResponse{Operation: "successful"}, nil
+	return &sdk.DeprovisionResponse{Operation: "successful"}, nil
 }
 
 func (a AnsibleBroker) validateDeprovision(id string) error {
@@ -339,7 +330,7 @@ func (a AnsibleBroker) validateDeprovision(id string) error {
 }
 
 // Bind - will create a binding between a service.
-func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *BindRequest) (*BindResponse, error) {
+func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *sdk.BindRequest) (*sdk.BindResponse, error) {
 	// binding_id is the id of the binding.
 	// the instanceUUID is the previously provisioned service id.
 	//
@@ -392,7 +383,7 @@ func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *
 		if uuid.Equal(bi.Id, bindingInstance.Id) {
 			if reflect.DeepEqual(bi.Parameters, bindingInstance.Parameters) {
 				a.log.Debug("already have this binding instance, returning 200")
-				return &BindResponse{}, ErrorAlreadyProvisioned
+				return &sdk.BindResponse{}, ErrorAlreadyProvisioned
 			}
 
 			// parameters are different
@@ -444,7 +435,7 @@ func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *
 	// TODO: Insert merged credentials into etcd? Separate into bind/provision
 	// so none are overwritten?
 
-	return &BindResponse{Credentials: returnCreds}, nil
+	return &sdk.BindResponse{Credentials: returnCreds}, nil
 }
 
 func mergeCredentials(
@@ -460,12 +451,12 @@ func (a AnsibleBroker) Unbind(instanceUUID uuid.UUID, bindingUUID uuid.UUID) err
 }
 
 // Update - update a service NOTE: not implemented
-func (a AnsibleBroker) Update(instanceUUID uuid.UUID, req *UpdateRequest) (*UpdateResponse, error) {
+func (a AnsibleBroker) Update(instanceUUID uuid.UUID, req *sdk.UpdateRequest) (*sdk.UpdateResponse, error) {
 	return nil, notImplemented
 }
 
 // LastOperation - gets the last operation and status
-func (a AnsibleBroker) LastOperation(instanceUUID uuid.UUID, req *LastOperationRequest) (*LastOperationResponse, error) {
+func (a AnsibleBroker) LastOperation(instanceUUID uuid.UUID, req *sdk.LastOperationRequest) (*sdk.LastOperationResponse, error) {
 	/*
 		look up the resource in etcd the operation should match what was returned by provision
 		take the status and return that.
@@ -486,14 +477,14 @@ func (a AnsibleBroker) LastOperation(instanceUUID uuid.UUID, req *LastOperationR
 	}
 
 	state := StateToLastOperation(jobstate.State)
-	return &LastOperationResponse{State: state, Description: ""}, err
+	return &sdk.LastOperationResponse{State: state, Description: ""}, err
 }
 
 //AddSpec - adding the spec to the catalog for local developement
-func (a AnsibleBroker) AddSpec(spec apb.Spec) (*CatalogResponse, error) {
+func (a AnsibleBroker) AddSpec(spec apb.Spec) (*sdk.CatalogResponse, error) {
 	if err := a.dao.SetSpec(spec.Id, &spec); err != nil {
 		return nil, err
 	}
 	service := SpecToService(&spec)
-	return &CatalogResponse{Services: []Service{service}}, nil
+	return &sdk.CatalogResponse{Services: []sdk.Service{service}}, nil
 }

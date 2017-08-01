@@ -208,7 +208,7 @@ func (a AnsibleBroker) Bootstrap() (*BootstrapResponse, error) {
 			registryErrors = append(registryErrors, err)
 		}
 		imageCount += count
-		addNameAndIDForSpec(s, r.RegistryName())
+		addNameAndIDForSpec(s, r.RegistryName(), r.ImagePrefix())
 		specs = append(specs, s...)
 	}
 	if len(registryErrors) == len(a.registry) {
@@ -227,12 +227,12 @@ func (a AnsibleBroker) Bootstrap() (*BootstrapResponse, error) {
 
 // addNameAndIDForSpec - will create the unique spec name and id
 // and set it for each spec
-func addNameAndIDForSpec(specs []*apb.Spec, registryName string) {
+func addNameAndIDForSpec(specs []*apb.Spec, registryName, imagePrefix string) {
 	for _, spec := range specs {
 		//need to make / a hyphen to allow for global uniqueness but still match spec.
 		spec.FQName = strings.Replace(fmt.Sprintf("%v-%v", registryName, spec.Image),
 			"/", "-", -1)
-
+		spec.FQImage = fmt.Sprintf("%v/%v", imagePrefix, spec.Image)
 		// ID Will be a md5 hash of the fully qualified spec name.
 		hasher := md5.New()
 		hasher.Write([]byte(spec.FQName))

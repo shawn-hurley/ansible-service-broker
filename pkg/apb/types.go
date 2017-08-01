@@ -41,6 +41,7 @@ type Spec struct {
 	ID          string                 `json:"id"`
 	FQName      string                 `json:"name" yaml:"name"`
 	Image       string                 `json:"image"`
+	FQImage     string                 `json:"full_image"`
 	Tags        []string               `json:"tags"`
 	Bindable    bool                   `json:"bindable"`
 	Description string                 `json:"description"`

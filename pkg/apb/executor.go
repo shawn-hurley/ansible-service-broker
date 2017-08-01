@@ -31,7 +31,7 @@ func ExecuteApb(
 
 	log.Debug("ExecutingApb:")
 	log.Debug("name:[ %s ]", spec.FQName)
-	log.Debug("image:[ %s ]", spec.Image)
+	log.Debug("image:[ %s ]", spec.FQImage)
 	log.Debug("action:[ %s ]", action)
 	log.Debug("pullPolciy:[ %s ]", clusterConfig.PullPolicy)
 
@@ -69,7 +69,7 @@ func ExecuteApb(
 			Containers: []v1.Container{
 				{
 					Name:  "apb",
-					Image: spec.Image,
+					Image: spec.FQImage,
 					Args: []string{
 						action,
 						"--extra-vars",

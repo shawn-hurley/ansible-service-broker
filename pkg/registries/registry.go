@@ -125,6 +125,11 @@ func (r Registry) RegistryName() string {
 	return r.config.Name
 }
 
+// ImagePrefix - retrieve the image prefix for the adapter.
+func (r Registry) ImagePrefix() string {
+	return r.adapter.RegistryName()
+}
+
 // NewRegistry - Create a new registry from the registry config.
 func NewRegistry(config Config, log *logging.Logger) (Registry, error) {
 	var adapter adapters.Adapter

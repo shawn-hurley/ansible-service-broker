@@ -38,6 +38,9 @@ type DockerHubImageResponse struct {
 
 // RegistryName - Retrieve the registry name
 func (r DockerHubAdapter) RegistryName() string {
+	if r.Config.Org != "" {
+		return fmt.Sprintf("%v/%v", dockerhubName, r.Config.Org)
+	}
 	return dockerhubName
 }
 

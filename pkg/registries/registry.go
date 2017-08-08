@@ -210,7 +210,7 @@ func validateSpecs(log *logging.Logger, inSpecs []*apb.Spec) []*apb.Spec {
 	for _, spec := range inSpecs {
 		go func(s *apb.Spec) {
 			defer wg.Done()
-			ok, failReason := validateSpecPlans(s)
+			ok, failReason := apb.ValidateSpec(s)
 			out <- resultT{ok, s, failReason}
 		}(spec)
 	}
@@ -234,24 +234,4 @@ func validateSpecs(log *logging.Logger, inSpecs []*apb.Spec) []*apb.Spec {
 	}
 
 	return validSpecs
-}
-
-func validateSpecPlans(spec *apb.Spec) (bool, string) {
-	// Specs must have at least one plan
-	if !(len(spec.Plans) > 0) {
-		return false, "Specs must have at least one plan"
-	}
-
-	dupes := make(map[string]bool)
-	for _, plan := range spec.Plans {
-		if _, contains := dupes[plan.Name]; contains {
-			reason := fmt.Sprintf("%s: %s",
-				"Plans within a spec must not contain duplicate value", plan.Name)
-
-			return false, reason
-		}
-		dupes[plan.Name] = true
-	}
-
-	return true, ""
 }

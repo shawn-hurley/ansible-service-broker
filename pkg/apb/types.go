@@ -3,11 +3,11 @@ package apb
 import (
 	"encoding/json"
 
-	logging "github.com/op/go-logging"
+	"github.com/openshift/ansible-service-broker/pkg/util"
 	"github.com/pborman/uuid"
 )
 
-var log = logging.MustGetLogger("apb")
+var log = util.NewLog("apb")
 
 // Parameters - generic string to object or value parameter
 type Parameters map[string]interface{}

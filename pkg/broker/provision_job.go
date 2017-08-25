@@ -3,7 +3,6 @@ package broker
 import (
 	"encoding/json"
 
-	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 )
 
@@ -11,7 +10,6 @@ import (
 type ProvisionJob struct {
 	serviceInstance *apb.ServiceInstance
 	clusterConfig   apb.ClusterConfig
-	log             *logging.Logger
 }
 
 // ProvisionMsg - Message to be returned from the provision job
@@ -32,24 +30,22 @@ func (m ProvisionMsg) Render() string {
 
 // NewProvisionJob - Create a new provision job.
 func NewProvisionJob(serviceInstance *apb.ServiceInstance, clusterConfig apb.ClusterConfig,
-	log *logging.Logger,
 ) *ProvisionJob {
 	return &ProvisionJob{
 		serviceInstance: serviceInstance,
-		clusterConfig:   clusterConfig,
-		log:             log}
+		clusterConfig:   clusterConfig}
 }
 
 // Run - run the provision job.
 func (p *ProvisionJob) Run(token string, msgBuffer chan<- WorkMsg) {
-	podName, extCreds, err := apb.Provision(p.serviceInstance, p.clusterConfig, p.log)
-	sm := apb.NewServiceAccountManager(p.log)
+	podName, extCreds, err := apb.Provision(p.serviceInstance, p.clusterConfig)
+	sm := apb.NewServiceAccountManager()
 
 	if err != nil {
-		p.log.Error("broker::Provision error occurred.")
-		p.log.Errorf("%s", err.Error())
+		log.Error("broker::Provision error occurred.")
+		log.Errorf("%s", err.Error())
 
-		p.log.Error("Attempting to destroy APB sandbox if it has been created")
+		log.Error("Attempting to destroy APB sandbox if it has been created")
 		sm.DestroyApbSandbox(podName, p.serviceInstance.Context.Namespace)
 		// send error message
 		// can't have an error type in a struct you want marshalled
@@ -59,7 +55,7 @@ func (p *ProvisionJob) Run(token string, msgBuffer chan<- WorkMsg) {
 		return
 	}
 
-	p.log.Info("Destroying APB sandbox...")
+	log.Info("Destroying APB sandbox...")
 	sm.DestroyApbSandbox(podName, p.serviceInstance.Context.Namespace)
 
 	// send creds

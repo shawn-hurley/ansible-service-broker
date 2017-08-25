@@ -1,13 +1,12 @@
 package apb
 
 import (
-	logging "github.com/op/go-logging"
 	"github.com/pkg/errors"
 )
 
 // Deprovision - runs the abp with the deprovision action.
 func Deprovision(
-	instance *ServiceInstance, clusterConfig ClusterConfig, log *logging.Logger,
+	instance *ServiceInstance, clusterConfig ClusterConfig,
 ) (string, error) {
 	log.Notice("============================================================")
 	log.Notice("                      DEPROVISIONING                        ")
@@ -33,14 +32,14 @@ func Deprovision(
 	// Might need to change up this interface to feed in instance ids
 	podName, err := ExecuteApb(
 		"deprovision", clusterConfig, instance.Spec,
-		instance.Context, instance.Parameters, log,
+		instance.Context, instance.Parameters,
 	)
 	if err != nil {
 		log.Error("Problem executing apb %s", err)
 		return podName, err
 	}
 
-	podOutput, err := watchPod(podName, instance.Context.Namespace, log)
+	podOutput, err := watchPod(podName, instance.Context.Namespace)
 	if err != nil {
 		log.Errorf("Error returned from watching pod\nerror: %s", err.Error())
 		log.Errorf("output: %s", podOutput)

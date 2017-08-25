@@ -6,20 +6,16 @@ import (
 
 	"github.com/openshift/ansible-service-broker/pkg/runtime"
 
-	logging "github.com/op/go-logging"
 	yaml "gopkg.in/yaml.v2"
 )
 
 // ServiceAccountManager - managers the service account methods
 type ServiceAccountManager struct {
-	log *logging.Logger
 }
 
 // NewServiceAccountManager - Creates a new service account manager
-func NewServiceAccountManager(log *logging.Logger) ServiceAccountManager {
-	return ServiceAccountManager{
-		log: log,
-	}
+func NewServiceAccountManager() ServiceAccountManager {
+	return ServiceAccountManager{}
 }
 
 // CreateApbSandbox - Sets up ServiceAccount based apb sandbox
@@ -67,25 +63,25 @@ func (s *ServiceAccountManager) CreateApbSandbox(namespace string, apbID string,
 	// Create resources in cluster
 	s.createResources(rFilePath, namespace)
 
-	s.log.Info("Successfully created apb sandbox: [ %s ]", apbID)
+	log.Info("Successfully created apb sandbox: [ %s ]", apbID)
 
 	return apbID, nil
 }
 
 func (s *ServiceAccountManager) createResources(rFilePath string, namespace string) error {
-	s.log.Debug("Creating resources from file at path: %s", rFilePath)
+	log.Debug("Creating resources from file at path: %s", rFilePath)
 	output, err := runtime.RunCommand("oc", "create", "-f", rFilePath, "--namespace="+namespace)
 	// TODO: Parse output somehow to validate things got created?
 	if err != nil {
-		s.log.Error("Something went wrong trying to create resources in cluster")
-		s.log.Error("Returned error:")
-		s.log.Error(err.Error())
-		s.log.Error("oc create -f output:")
-		s.log.Error(string(output))
+		log.Error("Something went wrong trying to create resources in cluster")
+		log.Error("Returned error:")
+		log.Error(err.Error())
+		log.Error("oc create -f output:")
+		log.Error(string(output))
 		return err
 	}
-	s.log.Debug("Successfully created resources, oc create -f output:")
-	s.log.Debug("\n" + string(output))
+	log.Debug("Successfully created resources, oc create -f output:")
+	log.Debug("\n" + string(output))
 	return nil
 }
 
@@ -102,16 +98,16 @@ func (s *ServiceAccountManager) writeResourceFile(handle string,
 	defer file.Close()
 
 	if err != nil {
-		s.log.Error("Something went wrong writing resources to file!")
-		s.log.Error(err.Error())
+		log.Error("Something went wrong writing resources to file!")
+		log.Error(err.Error())
 		return "", err
 	}
 
 	file.WriteString("---\n")
 	svcAcctY, err := yaml.Marshal(svcAcctM)
 	if err != nil {
-		s.log.Error("Something went wrong marshalling svc acct to yaml")
-		s.log.Error(err.Error())
+		log.Error("Something went wrong marshalling svc acct to yaml")
+		log.Error(err.Error())
 		return "", err
 	}
 	file.WriteString(string(svcAcctY))
@@ -119,19 +115,19 @@ func (s *ServiceAccountManager) writeResourceFile(handle string,
 	file.WriteString("---\n")
 	roleBindingY, err := yaml.Marshal(roleBindingM)
 	if err != nil {
-		s.log.Error("Something went wrong marshalling role binding to yaml")
-		s.log.Error(err.Error())
+		log.Error("Something went wrong marshalling role binding to yaml")
+		log.Error(err.Error())
 		return "", err
 	}
 	file.WriteString(string(roleBindingY))
 
-	s.log.Info("Successfully wrote resources to %s", filePath)
+	log.Info("Successfully wrote resources to %s", filePath)
 	return filePath, nil
 }
 
 func (s *ServiceAccountManager) createResourceDir() {
 	dir := resourceDir()
-	s.log.Debug("Creating resource file dir: %s", dir)
+	log.Debug("Creating resource file dir: %s", dir)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		os.Mkdir(dir, os.ModePerm)
 	}
@@ -139,15 +135,15 @@ func (s *ServiceAccountManager) createResourceDir() {
 
 func (s *ServiceAccountManager) createFile(handle string) (string, error) {
 	rFilePath := filePathFromHandle(handle)
-	s.log.Debug("Creating resource file %s", rFilePath)
+	log.Debug("Creating resource file %s", rFilePath)
 
 	if _, err := os.Stat(rFilePath); os.IsNotExist(err) {
 		// Valid behavior if the file does not exist, create
 		file, err := os.Create(rFilePath)
 		// Handle file creation error
 		if err != nil {
-			s.log.Error("Something went wrong touching new resource file!")
-			s.log.Error(err.Error())
+			log.Error("Something went wrong touching new resource file!")
+			log.Error(err.Error())
 			return "", err
 		}
 		defer file.Close()
@@ -162,39 +158,39 @@ func (s *ServiceAccountManager) createFile(handle string) (string, error) {
 // DestroyApbSandbox - Destroys the apb sandbox
 func (s *ServiceAccountManager) DestroyApbSandbox(handle string, namespace string) error {
 	if handle == "" {
-		s.log.Info("Requested destruction of APB sandbox with empty handle, skipping.")
+		log.Info("Requested destruction of APB sandbox with empty handle, skipping.")
 		return nil
 	}
 
-	s.log.Debug("Deleting serviceaccount %s, namespace %s", handle, namespace)
+	log.Debug("Deleting serviceaccount %s, namespace %s", handle, namespace)
 	output, err := runtime.RunCommand(
 		"oc", "delete", "serviceaccount", handle, "--namespace="+namespace,
 	)
 	if err != nil {
-		s.log.Error("Something went wrong trying to destroy the serviceaccount!")
-		s.log.Error(err.Error())
-		s.log.Error("oc delete output:")
-		s.log.Error(string(output))
+		log.Error("Something went wrong trying to destroy the serviceaccount!")
+		log.Error(err.Error())
+		log.Error("oc delete output:")
+		log.Error(string(output))
 		return err
 	}
-	s.log.Debug("Successfully deleted serviceaccount %s, namespace %s", handle, namespace)
-	s.log.Debug("oc delete output:")
-	s.log.Debug(string(output))
+	log.Debug("Successfully deleted serviceaccount %s, namespace %s", handle, namespace)
+	log.Debug("oc delete output:")
+	log.Debug(string(output))
 
-	s.log.Debug("Deleting rolebinding %s, namespace %s", handle, namespace)
+	log.Debug("Deleting rolebinding %s, namespace %s", handle, namespace)
 	output, err = runtime.RunCommand(
 		"oc", "delete", "rolebinding", handle, "--namespace="+namespace,
 	)
 	if err != nil {
-		s.log.Error("Something went wrong trying to destroy the rolebinding!")
-		s.log.Error(err.Error())
-		s.log.Error("oc delete output:")
-		s.log.Error(string(output))
+		log.Error("Something went wrong trying to destroy the rolebinding!")
+		log.Error(err.Error())
+		log.Error("oc delete output:")
+		log.Error(string(output))
 		return err
 	}
-	s.log.Debug("Successfully deleted rolebinding %s, namespace %s", handle, namespace)
-	s.log.Debug("oc delete output:")
-	s.log.Debug(string(output))
+	log.Debug("Successfully deleted rolebinding %s, namespace %s", handle, namespace)
+	log.Debug("oc delete output:")
+	log.Debug(string(output))
 
 	// If file doesn't exist, ignore
 	// "If there is an error, it will be of type *PathError"

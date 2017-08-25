@@ -10,8 +10,6 @@ import (
 	"github.com/pborman/uuid"
 )
 
-var log = logging.MustGetLogger("handler")
-
 func init() {
 	colorFormatter := logging.MustStringFormatter(
 		"%{color}[%{time}] [%{level}] %{message}%{color:reset}",
@@ -25,7 +23,7 @@ func TestUpdate(t *testing.T) {
 	brokerConfig := new(Config)
 	brokerConfig.DevBroker = true
 	brokerConfig.LaunchApbOnBind = false
-	broker, _ := NewAnsibleBroker(nil, log, apb.ClusterConfig{}, nil, WorkEngine{}, *brokerConfig)
+	broker, _ := NewAnsibleBroker(nil, apb.ClusterConfig{}, nil, WorkEngine{}, *brokerConfig)
 	resp, err := broker.Update(uuid.NewUUID(), nil)
 	if resp != nil {
 		t.Fail()

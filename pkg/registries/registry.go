@@ -8,12 +8,14 @@ import (
 	"strings"
 	"sync"
 
-	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/openshift/ansible-service-broker/pkg/registries/adapters"
+	"github.com/openshift/ansible-service-broker/pkg/util"
 )
 
 var regex = regexp.MustCompile(`[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*`)
+
+var log = util.NewLog("registries")
 
 // Config - Configuration for the registry
 type Config struct {
@@ -45,7 +47,6 @@ func (c Config) Validate() bool {
 type Registry struct {
 	config  Config
 	adapter adapters.Adapter
-	log     *logging.Logger
 	filter  Filter
 }
 
@@ -53,7 +54,7 @@ type Registry struct {
 func (r Registry) LoadSpecs() ([]*apb.Spec, int, error) {
 	imageNames, err := r.adapter.GetImageNames()
 	if err != nil {
-		r.log.Errorf("unable to retrieve image names for registry %v - %v",
+		log.Errorf("unable to retrieve image names for registry %v - %v",
 			r.config.Name, err)
 		return []*apb.Spec{}, 0, err
 	}
@@ -61,12 +62,12 @@ func (r Registry) LoadSpecs() ([]*apb.Spec, int, error) {
 	imageNames = registryFilterImagesForAPBs(imageNames)
 	validNames, filteredNames := r.filter.Run(imageNames)
 
-	r.log.Debug("Filter applied against registry: %s", r.config.Name)
+	log.Debug("Filter applied against registry: %s", r.config.Name)
 
 	if len(validNames) != 0 {
-		r.log.Debugf("APBs passing white/blacklist filter:")
+		log.Debugf("APBs passing white/blacklist filter:")
 		for _, name := range validNames {
-			r.log.Debugf("-> %s", name)
+			log.Debugf("-> %s", name)
 		}
 	}
 
@@ -77,28 +78,28 @@ func (r Registry) LoadSpecs() ([]*apb.Spec, int, error) {
 			for _, name := range filteredNames {
 				buffer.WriteString(fmt.Sprintf("-> %s", name))
 			}
-			r.log.Infof(buffer.String())
+			log.Infof(buffer.String())
 		}()
 	}
 
 	// Debug output filtered out names.
 	specs, err := r.adapter.FetchSpecs(validNames)
 	if err != nil {
-		r.log.Errorf("unable to fetch specs for registry %v - %v",
+		log.Errorf("unable to fetch specs for registry %v - %v",
 			r.config.Name, err)
 		return []*apb.Spec{}, 0, err
 	}
 
-	r.log.Infof("Validating specs...")
-	validatedSpecs := validateSpecs(r.log, specs)
+	log.Infof("Validating specs...")
+	validatedSpecs := validateSpecs(specs)
 	failedSpecsCount := len(specs) - len(validatedSpecs)
 
 	if failedSpecsCount != 0 {
-		r.log.Warningf(
+		log.Warningf(
 			"%d specs of %d discovered specs failed validation from registry: %s",
 			failedSpecsCount, len(specs), r.adapter.RegistryName())
 	} else {
-		r.log.Notice("All specs passed validation!")
+		log.Notice("All specs passed validation!")
 	}
 
 	return validatedSpecs, len(imageNames), nil
@@ -128,7 +129,7 @@ func (r Registry) RegistryName() string {
 }
 
 // NewRegistry - Create a new registry from the registry config.
-func NewRegistry(config Config, log *logging.Logger) (Registry, error) {
+func NewRegistry(config Config) (Registry, error) {
 	var adapter adapters.Adapter
 
 	log.Info("== REGISTRY CX == ")
@@ -167,12 +168,11 @@ func NewRegistry(config Config, log *logging.Logger) (Registry, error) {
 
 	return Registry{config: config,
 		adapter: adapter,
-		log:     log,
-		filter:  createFilter(config, log),
+		filter:  createFilter(config),
 	}, nil
 }
 
-func createFilter(config Config, log *logging.Logger) Filter {
+func createFilter(config Config) Filter {
 	log.Debug("Creating filter for registry: %s", config.Name)
 	log.Debug("whitelist: %v", config.WhiteList)
 	log.Debug("blacklist: %v", config.BlackList)
@@ -202,7 +202,7 @@ func createFilter(config Config, log *logging.Logger) Filter {
 	return filter
 }
 
-func validateSpecs(log *logging.Logger, inSpecs []*apb.Spec) []*apb.Spec {
+func validateSpecs(inSpecs []*apb.Spec) []*apb.Spec {
 	var wg sync.WaitGroup
 	wg.Add(len(inSpecs))
 

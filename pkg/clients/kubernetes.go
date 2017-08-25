@@ -2,7 +2,7 @@ package clients
 
 import (
 	"errors"
-	logging "github.com/op/go-logging"
+
 	restclient "k8s.io/client-go/rest"
 
 	"k8s.io/client-go/tools/clientcmd"
@@ -11,10 +11,10 @@ import (
 )
 
 // Kubernetes - Create a new kubernetes client if needed, returns reference
-func Kubernetes(log *logging.Logger) (*clientset.Clientset, error) {
+func Kubernetes() (*clientset.Clientset, error) {
 	errMsg := "Something went wrong while initializing kubernetes client!\n"
 	once.Kubernetes.Do(func() {
-		client, err := newKubernetes(log)
+		client, err := newKubernetes()
 		if err != nil {
 			log.Error(errMsg)
 			// NOTE: Looking to leverage panic recovery to gracefully handle this
@@ -44,7 +44,7 @@ func createClientConfigFromFile(configPath string) (*restclient.Config, error) {
 	return config, nil
 }
 
-func newKubernetes(log *logging.Logger) (*clientset.Clientset, error) {
+func newKubernetes() (*clientset.Clientset, error) {
 	// NOTE: Both the external and internal client object are using the same
 	// clientset library. Internal clientset normally uses a different
 	// library

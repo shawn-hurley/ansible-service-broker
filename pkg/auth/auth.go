@@ -8,8 +8,10 @@ import (
 	"path"
 	"strings"
 
-	logging "github.com/op/go-logging"
+	"github.com/openshift/ansible-service-broker/pkg/util"
 )
+
+var log = util.NewLog("auth")
 
 // Config - Configuration for authentication
 type Config struct {
@@ -60,7 +62,6 @@ func (u User) GetName() string {
 // users from a file.
 type FileUserServiceAdapter struct {
 	filedir string
-	log     *logging.Logger
 	userdb  map[string]User
 }
 
@@ -69,12 +70,12 @@ func (d *FileUserServiceAdapter) buildDB() error {
 	passfile := path.Join(d.filedir, "password")
 	username, uerr := ioutil.ReadFile(userfile)
 	if uerr != nil {
-		d.log.Error("Error reading username. %v", uerr.Error())
+		log.Error("Error reading username. %v", uerr.Error())
 		return uerr
 	}
 	password, perr := ioutil.ReadFile(passfile)
 	if perr != nil {
-		d.log.Error("Error reading password. %v", perr.Error())
+		log.Error("Error reading password. %v", perr.Error())
 		return perr
 	}
 
@@ -105,12 +106,12 @@ func (d FileUserServiceAdapter) FindByLogin(login string) (User, error) {
 func (d FileUserServiceAdapter) ValidateUser(username string, password string) bool {
 	user, err := d.FindByLogin(username)
 	if err != nil {
-		d.log.Debug("user not found, returning false")
+		log.Debug("user not found, returning false")
 		return false
 	}
 
 	if user.Username == username && user.Password == password {
-		d.log.Debug("user found, returning true")
+		log.Debug("user found, returning true")
 		return true
 	}
 
@@ -118,12 +119,12 @@ func (d FileUserServiceAdapter) ValidateUser(username string, password string) b
 }
 
 // NewFileUserServiceAdapter - constructor for the FUSA
-func NewFileUserServiceAdapter(dir string, log *logging.Logger) (*FileUserServiceAdapter, error) {
+func NewFileUserServiceAdapter(dir string) (*FileUserServiceAdapter, error) {
 	if dir == "" {
 		return nil, fmt.Errorf("directory is empty, defaulting to %s", dir)
 	}
 
-	fusa := FileUserServiceAdapter{filedir: dir, log: log}
+	fusa := FileUserServiceAdapter{filedir: dir}
 	err := fusa.buildDB()
 	if err != nil {
 		log.Error("we had a problem building the DB for FileUserServiceAdapter. ", err)
@@ -133,12 +134,12 @@ func NewFileUserServiceAdapter(dir string, log *logging.Logger) (*FileUserServic
 }
 
 // GetProviders - returns the list of configured providers
-func GetProviders(entries []Config, log *logging.Logger) []Provider {
+func GetProviders(entries []Config) []Provider {
 	providers := make([]Provider, 0, len(entries))
 
 	for _, cfg := range entries {
 		if cfg.Enabled {
-			provider, err := createProvider(cfg.Type, log)
+			provider, err := createProvider(cfg.Type)
 			if err != nil {
 				log.Warning("Unable to create provider for %v. %v", cfg.Type, err)
 				continue
@@ -150,15 +151,15 @@ func GetProviders(entries []Config, log *logging.Logger) []Provider {
 	return providers
 }
 
-func createProvider(providerType string, log *logging.Logger) (Provider, error) {
+func createProvider(providerType string) (Provider, error) {
 	switch strings.ToLower(providerType) {
 	case "basic":
 		log.Info("Configured for basic auth")
-		usa, err := GetUserServiceAdapter(log)
+		usa, err := GetUserServiceAdapter()
 		if err != nil {
 			return nil, err
 		}
-		return NewBasicAuth(usa, log), nil
+		return NewBasicAuth(usa), nil
 	// add case "oauth":
 	default:
 		panic("Unknown auth provider")
@@ -166,8 +167,8 @@ func createProvider(providerType string, log *logging.Logger) (Provider, error) 
 }
 
 // GetUserServiceAdapter returns the configured UserServiceAdapter
-func GetUserServiceAdapter(log *logging.Logger) (UserServiceAdapter, error) {
+func GetUserServiceAdapter() (UserServiceAdapter, error) {
 	// TODO: really need to figure out a better way to define what
 	// should be returned.
-	return NewFileUserServiceAdapter("/var/run/asb-auth", log)
+	return NewFileUserServiceAdapter("/var/run/asb-auth")
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	ft "github.com/openshift/ansible-service-broker/pkg/fusortest"
 	"github.com/openshift/ansible-service-broker/pkg/registries/adapters"
@@ -128,10 +127,8 @@ func setUp() Registry {
 	}
 	filter := Filter{}
 	c := Config{}
-	log := &logging.Logger{}
 	r = Registry{config: c,
 		adapter: a,
-		log:     log,
 		filter:  filter}
 	return r
 }
@@ -145,10 +142,8 @@ func setUpNoPlans() Registry {
 	}
 	filter := Filter{}
 	c := Config{}
-	log := &logging.Logger{}
 	r = Registry{config: c,
 		adapter: a,
-		log:     log,
 		filter:  filter}
 	return r
 }
@@ -195,8 +190,7 @@ func TestFailIsFalse(t *testing.T) {
 
 func TestNewRegistryRHCC(t *testing.T) {
 	c := Config{Type: "rhcc"}
-	log := &logging.Logger{}
-	reg, err := NewRegistry(c, log)
+	reg, err := NewRegistry(c)
 	if err != nil {
 		ft.AssertTrue(t, false)
 	}
@@ -206,8 +200,7 @@ func TestNewRegistryRHCC(t *testing.T) {
 
 func TestNewRegistryDockerHub(t *testing.T) {
 	c := Config{Type: "dockerhub"}
-	log := &logging.Logger{}
-	reg, err := NewRegistry(c, log)
+	reg, err := NewRegistry(c)
 	if err != nil {
 		ft.AssertTrue(t, false)
 	}
@@ -217,8 +210,7 @@ func TestNewRegistryDockerHub(t *testing.T) {
 
 func TestNewRegistryMock(t *testing.T) {
 	c := Config{Type: "mocK"}
-	log := &logging.Logger{}
-	reg, err := NewRegistry(c, log)
+	reg, err := NewRegistry(c)
 	if err != nil {
 		ft.AssertTrue(t, false)
 	}
@@ -234,6 +226,5 @@ func TestPanicOnUnknow(t *testing.T) {
 		}
 	}()
 	c := Config{Type: "UnKOwn"}
-	log := &logging.Logger{}
-	NewRegistry(c, log)
+	NewRegistry(c)
 }

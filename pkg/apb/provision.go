@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/openshift/ansible-service-broker/pkg/runtime"
-
-	logging "github.com/op/go-logging"
 )
 
 // Provision - will run the abp with the provision action.
@@ -17,7 +15,7 @@ import (
 // Little looser, but still not great
 func Provision(
 	instance *ServiceInstance,
-	clusterConfig ClusterConfig, log *logging.Logger,
+	clusterConfig ClusterConfig,
 ) (string, *ExtractedCredentials, error) {
 	log.Notice("============================================================")
 	log.Notice("                       PROVISIONING                         ")
@@ -49,7 +47,7 @@ func Provision(
 
 	podName, err := ExecuteApb(
 		"provision", clusterConfig, instance.Spec,
-		instance.Context, instance.Parameters, log,
+		instance.Context, instance.Parameters,
 	)
 
 	if err != nil {
@@ -58,7 +56,7 @@ func Provision(
 		return podName, nil, err
 	}
 
-	creds, err := ExtractCredentials(podName, instance.Context.Namespace, log)
+	creds, err := ExtractCredentials(podName, instance.Context.Namespace)
 	// We should not save credentials from an app that finds them and isn't
 	// bindable
 	if creds != nil && !instance.Spec.Bindable {

@@ -13,24 +13,25 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/openshift/ansible-service-broker/pkg/auth"
 	"github.com/openshift/ansible-service-broker/pkg/broker"
+	"github.com/openshift/ansible-service-broker/pkg/util"
 	"github.com/pborman/uuid"
 )
+
+var log = util.NewLog("handler")
 
 // TODO: implement asynchronous operations
 
 type handler struct {
 	router       mux.Router
 	broker       broker.Broker
-	log          *logging.Logger
 	brokerConfig broker.Config
 }
 
 // authHandler - does the authentication for the routes
-func authHandler(h http.Handler, providers []auth.Provider, log *logging.Logger) http.Handler {
+func authHandler(h http.Handler, providers []auth.Provider) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		// TODO: determine what to do with the Principal. We don't really have a
@@ -74,11 +75,10 @@ func createVarHandler(r VarHandler) GorillaRouteHandler {
 }
 
 // NewHandler - Create a new handler by attaching the routes and setting logger and broker.
-func NewHandler(b broker.Broker, log *logging.Logger, brokerConfig broker.Config) http.Handler {
+func NewHandler(b broker.Broker, brokerConfig broker.Config) http.Handler {
 	h := handler{
 		router:       *mux.NewRouter(),
 		broker:       b,
-		log:          log,
 		brokerConfig: brokerConfig,
 	}
 
@@ -103,8 +103,8 @@ func NewHandler(b broker.Broker, log *logging.Logger, brokerConfig broker.Config
 		h.router.HandleFunc("/apb/spec", createVarHandler(h.apbRemoveSpecs)).Methods("DELETE")
 	}
 
-	providers := auth.GetProviders(brokerConfig.Auth, log)
-	return handlers.LoggingHandler(os.Stdout, authHandler(h, providers, log))
+	providers := auth.GetProviders(brokerConfig.Auth)
+	return handlers.LoggingHandler(os.Stdout, authHandler(h, providers))
 }
 
 func (h handler) bootstrap(w http.ResponseWriter, r *http.Request, params map[string]string) {
@@ -215,7 +215,7 @@ func (h handler) deprovision(w http.ResponseWriter, r *http.Request, params map[
 	resp, err := h.broker.Deprovision(instanceUUID, planID, async)
 
 	if err != nil {
-		h.log.Debug("err for deprovision - %#v", err)
+		log.Debug("err for deprovision - %#v", err)
 	}
 
 	switch err {
@@ -317,7 +317,7 @@ func (h handler) lastoperation(w http.ResponseWriter, r *http.Request, params ma
 	if op := r.FormValue("operation"); op != "" {
 		req.Operation = op
 	} else {
-		h.log.Warning(fmt.Sprintf("operation not supplied, relying solely on the instance_uuid [%s]", instanceUUID))
+		log.Warning(fmt.Sprintf("operation not supplied, relying solely on the instance_uuid [%s]", instanceUUID))
 	}
 
 	// service_id is optional
@@ -337,46 +337,46 @@ func (h handler) lastoperation(w http.ResponseWriter, r *http.Request, params ma
 
 // apbAddSpec - Development only route. Will be used by for local developers to add images to the catalog.
 func (h handler) apbAddSpec(w http.ResponseWriter, r *http.Request, params map[string]string) {
-	h.log.Debug("handler::apbAddSpec")
+	log.Debug("handler::apbAddSpec")
 	//Read Request for an image name
 
 	// create helper method from MockRegistry
 	ansibleBroker, ok := h.broker.(broker.DevBroker)
 	if !ok {
-		h.log.Errorf("unable to use broker - %T as ansible service broker", h.broker)
+		log.Errorf("unable to use broker - %T as ansible service broker", h.broker)
 		writeResponse(w, http.StatusInternalServerError, broker.ErrorResponse{Description: "Internal server error"})
 		return
 	}
 	//Decode
 	spec64Yaml := r.FormValue("apbSpec")
 	if spec64Yaml == "" {
-		h.log.Errorf("Could not find form parameter apbSpec")
+		log.Errorf("Could not find form parameter apbSpec")
 		writeResponse(w, http.StatusBadRequest, broker.ErrorResponse{Description: "Could not parameter apbSpec"})
 		return
 	}
 	decodedSpecYaml, err := base64.StdEncoding.DecodeString(spec64Yaml)
 	if err != nil {
-		h.log.Errorf("Something went wrong decoding spec from encoded string - %v err -%v", spec64Yaml, err)
+		log.Errorf("Something went wrong decoding spec from encoded string - %v err -%v", spec64Yaml, err)
 		writeResponse(w, http.StatusBadRequest, broker.ErrorResponse{Description: "Invalid parameter encoding"})
 		return
 	}
-	h.log.Debug("Successfully decoded pushed spec:")
-	h.log.Debugf("%s", decodedSpecYaml)
+	log.Debug("Successfully decoded pushed spec:")
+	log.Debugf("%s", decodedSpecYaml)
 
 	var spec apb.Spec
 	if err = yaml.Unmarshal([]byte(decodedSpecYaml), &spec); err != nil {
-		h.log.Errorf("Unable to decode yaml - %v to spec err - %v", decodedSpecYaml, err)
+		log.Errorf("Unable to decode yaml - %v to spec err - %v", decodedSpecYaml, err)
 		writeResponse(w, http.StatusBadRequest, broker.ErrorResponse{Description: "Invalid parameter yaml"})
 		return
 	}
 
-	h.log.Debug("Unmarshalled into apb.Spec:")
-	h.log.Debugf("%+v", spec)
+	log.Debug("Unmarshalled into apb.Spec:")
+	log.Debugf("%+v", spec)
 
 	resp, err := ansibleBroker.AddSpec(spec)
 	if err != nil {
-		h.log.Errorf("An error occurred while trying to add a spec via apb push:")
-		h.log.Errorf("%s", err.Error())
+		log.Errorf("An error occurred while trying to add a spec via apb push:")
+		log.Errorf("%s", err.Error())
 		writeResponse(w, http.StatusInternalServerError,
 			broker.ErrorResponse{Description: err.Error()})
 		return
@@ -388,7 +388,7 @@ func (h handler) apbAddSpec(w http.ResponseWriter, r *http.Request, params map[s
 func (h handler) apbRemoveSpec(w http.ResponseWriter, r *http.Request, params map[string]string) {
 	ansibleBroker, ok := h.broker.(broker.DevBroker)
 	if !ok {
-		h.log.Errorf("unable to use broker - %T as ansible service broker", h.broker)
+		log.Errorf("unable to use broker - %T as ansible service broker", h.broker)
 		writeResponse(w, http.StatusInternalServerError, broker.ErrorResponse{Description: "Internal server error"})
 		return
 	}
@@ -398,7 +398,7 @@ func (h handler) apbRemoveSpec(w http.ResponseWriter, r *http.Request, params ma
 	if specID != "" {
 		err = ansibleBroker.RemoveSpec(specID)
 	} else {
-		h.log.Errorf("Unable to find spec id in request")
+		log.Errorf("Unable to find spec id in request")
 		writeResponse(w, http.StatusBadRequest, broker.ErrorResponse{Description: "No Spec/service id found."})
 		return
 	}
@@ -408,7 +408,7 @@ func (h handler) apbRemoveSpec(w http.ResponseWriter, r *http.Request, params ma
 func (h handler) apbRemoveSpecs(w http.ResponseWriter, r *http.Request, params map[string]string) {
 	ansibleBroker, ok := h.broker.(broker.DevBroker)
 	if !ok {
-		h.log.Errorf("unable to use broker - %T as ansible service broker", h.broker)
+		log.Errorf("unable to use broker - %T as ansible service broker", h.broker)
 		writeResponse(w, http.StatusInternalServerError, broker.ErrorResponse{Description: "Internal server error"})
 		return
 	}
@@ -421,8 +421,8 @@ func (h handler) printRequest(req *http.Request) {
 	if h.brokerConfig.OutputRequest {
 		b, err := httputil.DumpRequest(req, true)
 		if err != nil {
-			h.log.Errorf("unable to dump request to log: %v", err)
+			log.Errorf("unable to dump request to log: %v", err)
 		}
-		h.log.Infof("Request: %q", b)
+		log.Infof("Request: %q", b)
 	}
 }

@@ -8,7 +8,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/clients"
 	"github.com/pborman/uuid"
 	"k8s.io/kubernetes/pkg/api/v1"
@@ -21,7 +20,6 @@ func ExecuteApb(
 	spec *Spec,
 	context *Context,
 	p *Parameters,
-	log *logging.Logger,
 ) (string, error) {
 	extraVars, err := createExtraVars(context, p)
 
@@ -53,7 +51,7 @@ func ExecuteApb(
 	ns := context.Namespace
 	apbID := fmt.Sprintf("apb-%s", uuid.New())
 
-	sam := NewServiceAccountManager(log)
+	sam := NewServiceAccountManager()
 	serviceAccountName, err := sam.CreateApbSandbox(ns, apbID)
 
 	if err != nil {
@@ -84,7 +82,7 @@ func ExecuteApb(
 	}
 
 	log.Notice(fmt.Sprintf("Creating pod %q in the %s namespace", pod.Name, ns))
-	k8scli, err := clients.Kubernetes(log)
+	k8scli, err := clients.Kubernetes()
 	if err != nil {
 		return apbID, err
 	}

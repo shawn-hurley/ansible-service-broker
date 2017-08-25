@@ -2,8 +2,6 @@ package apb
 
 import (
 	"fmt"
-
-	logging "github.com/op/go-logging"
 )
 
 // Bind - Will run the APB with the bind action.
@@ -11,7 +9,6 @@ func Bind(
 	instance *ServiceInstance,
 	parameters *Parameters,
 	clusterConfig ClusterConfig,
-	log *logging.Logger,
 ) (string, *ExtractedCredentials, error) {
 	log.Notice("============================================================")
 	log.Notice("                       BINDING                              ")
@@ -24,7 +21,7 @@ func Bind(
 
 	podName, err := ExecuteApb(
 		"bind", clusterConfig, instance.Spec,
-		instance.Context, parameters, log,
+		instance.Context, parameters,
 	)
 
 	if err != nil {
@@ -32,6 +29,6 @@ func Bind(
 		return podName, nil, err
 	}
 
-	creds, err := ExtractCredentials(podName, instance.Context.Namespace, log)
+	creds, err := ExtractCredentials(podName, instance.Context.Namespace)
 	return podName, creds, err
 }

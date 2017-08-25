@@ -9,16 +9,14 @@ import (
 	"time"
 
 	"github.com/openshift/ansible-service-broker/pkg/runtime"
-
-	logging "github.com/op/go-logging"
 )
 
 // ExtractCredentials - Extract credentials from pod in a certain namespace.
 func ExtractCredentials(
-	podname string, namespace string, log *logging.Logger,
+	podname string, namespace string,
 ) (*ExtractedCredentials, error) {
 	log.Debug("Calling monitorOutput on " + podname)
-	bindOutput, err := monitorOutput(namespace, podname, log)
+	bindOutput, err := monitorOutput(namespace, podname)
 	if bindOutput == nil {
 		return nil, nil
 	}
@@ -29,7 +27,7 @@ func ExtractCredentials(
 	return buildExtractedCredentials(bindOutput)
 }
 
-func monitorOutput(namespace string, podname string, log *logging.Logger) ([]byte, error) {
+func monitorOutput(namespace string, podname string) ([]byte, error) {
 	// TODO: Error handling here
 	// It would also be nice to gather the script output that exec runs
 	// instead of only getting the credentials

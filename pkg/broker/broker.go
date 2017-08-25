@@ -10,12 +10,12 @@ import (
 	"strings"
 
 	"github.com/coreos/etcd/client"
-	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/openshift/ansible-service-broker/pkg/auth"
 	"github.com/openshift/ansible-service-broker/pkg/dao"
 	"github.com/openshift/ansible-service-broker/pkg/registries"
 	"github.com/openshift/ansible-service-broker/pkg/runtime"
+	"github.com/openshift/ansible-service-broker/pkg/util"
 	"github.com/pborman/uuid"
 	k8srestclient "k8s.io/client-go/rest"
 )
@@ -37,6 +37,8 @@ const (
 	// bindCredentialsKey - Key used to pas bind credentials to apb.
 	bindCredentialsKey = "_apb_bind_creds"
 )
+
+var log = util.NewLog("broker")
 
 // Broker - A broker is used to to compelete all the tasks that a broker must be able to do.
 type Broker interface {
@@ -75,7 +77,6 @@ type DevBroker interface {
 // AnsibleBroker - Broker using ansible and images to interact with oc/kubernetes/etcd
 type AnsibleBroker struct {
 	dao           *dao.Dao
-	log           *logging.Logger
 	clusterConfig apb.ClusterConfig
 	registry      []registries.Registry
 	engine        *WorkEngine
@@ -83,12 +84,11 @@ type AnsibleBroker struct {
 }
 
 // NewAnsibleBroker - Creates a new ansible broker
-func NewAnsibleBroker(dao *dao.Dao, log *logging.Logger, clusterConfig apb.ClusterConfig,
+func NewAnsibleBroker(dao *dao.Dao, clusterConfig apb.ClusterConfig,
 	registry []registries.Registry, engine WorkEngine, brokerConfig Config,
 ) (*AnsibleBroker, error) {
 	broker := &AnsibleBroker{
 		dao:           dao,
-		log:           log,
 		clusterConfig: clusterConfig,
 		registry:      registry,
 		engine:        &engine,
@@ -107,10 +107,10 @@ func (a AnsibleBroker) getServiceInstance(instanceUUID uuid.UUID) (*apb.ServiceI
 	instance, err := a.dao.GetServiceInstance(instanceUUID.String())
 	if err != nil {
 		if client.IsKeyNotFound(err) {
-			a.log.Errorf("Could not find a service instance in dao - %v", err)
+			log.Errorf("Could not find a service instance in dao - %v", err)
 			return nil, ErrorNotFound
 		}
-		a.log.Error("Couldn't find a service instance: ", err)
+		log.Error("Couldn't find a service instance: ", err)
 		return nil, err
 	}
 	return instance, nil
@@ -125,12 +125,12 @@ func (a AnsibleBroker) Login() error {
 	}
 
 	if config.CAFile != "" {
-		err = ocLogin(a.log, config.Host,
+		err = ocLogin(config.Host,
 			"--token", config.BearerToken,
 			"--certificate-authority", config.CAFile,
 		)
 	} else {
-		err = ocLogin(a.log, config.Host,
+		err = ocLogin(config.Host,
 			"--token", config.BearerToken,
 			"--insecure-skip-tls-verify=false",
 		)
@@ -151,9 +151,9 @@ func (a AnsibleBroker) getLoginDetails() (loginDetails, error) {
 	// If overrides are passed into the config map, Host and BearerTokenFile
 	// values *must* be provided, else we'll default to the k8srestclient details
 	if a.clusterConfig.Host != "" && a.clusterConfig.BearerTokenFile != "" {
-		a.log.Info("ClusterConfig Host and BearerToken provided, preferring configurable overrides")
-		a.log.Info("Host: [ %s ]", a.clusterConfig.Host)
-		a.log.Info("BearerTokenFile: [ %s ]", a.clusterConfig.BearerTokenFile)
+		log.Info("ClusterConfig Host and BearerToken provided, preferring configurable overrides")
+		log.Info("Host: [ %s ]", a.clusterConfig.Host)
+		log.Info("BearerTokenFile: [ %s ]", a.clusterConfig.BearerTokenFile)
 
 		token, err := ioutil.ReadFile(a.clusterConfig.BearerTokenFile)
 		if err != nil {
@@ -164,11 +164,11 @@ func (a AnsibleBroker) getLoginDetails() (loginDetails, error) {
 		config.BearerToken = string(token)
 		config.CAFile = a.clusterConfig.CAFile
 	} else {
-		a.log.Info("No cluster credential overrides provided, using k8s InClusterConfig")
+		log.Info("No cluster credential overrides provided, using k8s InClusterConfig")
 		k8sConfig, err := k8srestclient.InClusterConfig()
 		if err != nil {
-			a.log.Error("Cluster host & bearer_token_file missing from config, and failed to retrieve InClusterConfig")
-			a.log.Error("Be sure you have configured a cluster host and service account credentials if" +
+			log.Error("Cluster host & bearer_token_file missing from config, and failed to retrieve InClusterConfig")
+			log.Error("Be sure you have configured a cluster host and service account credentials if" +
 				" you are running the broker outside of a cluster Pod")
 			return config, err
 		}
@@ -186,7 +186,7 @@ func (a AnsibleBroker) getLoginDetails() (loginDetails, error) {
 // TODO: Response here? Async?
 // TODO: How do we handle a large amount of data on this side as well? Pagination?
 func (a AnsibleBroker) Bootstrap() (*BootstrapResponse, error) {
-	a.log.Info("AnsibleBroker::Bootstrap")
+	log.Info("AnsibleBroker::Bootstrap")
 	var err error
 	var specs []*apb.Spec
 	var imageCount int
@@ -195,12 +195,12 @@ func (a AnsibleBroker) Bootstrap() (*BootstrapResponse, error) {
 	dir := "/spec"
 	specs, err = a.dao.BatchGetSpecs(dir)
 	if err != nil {
-		a.log.Error("Something went real bad trying to retrieve batch specs for deletion... - %v", err)
+		log.Error("Something went real bad trying to retrieve batch specs for deletion... - %v", err)
 		return nil, err
 	}
 	err = a.dao.BatchDeleteSpecs(specs)
 	if err != nil {
-		a.log.Error("Something went real bad trying to delete batch specs... - %v", err)
+		log.Error("Something went real bad trying to delete batch specs... - %v", err)
 		return nil, err
 	}
 	specs = []*apb.Spec{}
@@ -210,11 +210,11 @@ func (a AnsibleBroker) Bootstrap() (*BootstrapResponse, error) {
 	for _, r := range a.registry {
 		s, count, err := r.LoadSpecs()
 		if err != nil && r.Fail(err) {
-			a.log.Errorf("registry caused bootstrap failure - %v", err)
+			log.Errorf("registry caused bootstrap failure - %v", err)
 			return nil, err
 		}
 		if err != nil {
-			a.log.Warningf("registry: %v was unable to complete bootstrap - %v",
+			log.Warningf("registry: %v was unable to complete bootstrap - %v",
 				r.RegistryName, err)
 			registryErrors = append(registryErrors, err)
 		}
@@ -269,7 +269,7 @@ func (a AnsibleBroker) Recover() (string, error) {
 	if err != nil {
 		// no jobs or states to recover, this is OK.
 		if client.IsKeyNotFound(err) {
-			a.log.Info("No jobs to recover")
+			log.Info("No jobs to recover")
 			return "", nil
 		}
 		return "", err
@@ -302,20 +302,20 @@ func (a AnsibleBroker) Recover() (string, error) {
 		if rs.State.Podname == "" {
 			// NO, we do not have a podname
 
-			a.log.Info(fmt.Sprintf("No podname. Attempting to restart job: %s", instanceID))
+			log.Info(fmt.Sprintf("No podname. Attempting to restart job: %s", instanceID))
 
-			a.log.Debug(fmt.Sprintf("%v", instance))
+			log.Debug(fmt.Sprintf("%v", instance))
 
 			// Handle bad write of service instance
 			if instance.Spec == nil || instance.Parameters == nil {
 				a.dao.SetState(instanceID, apb.JobState{Token: rs.State.Token, State: apb.StateFailed})
 				a.dao.DeleteServiceInstance(instance.ID.String())
-				a.log.Warning(fmt.Sprintf("incomplete ServiceInstance [%s] record, marking job as failed", instance.ID))
+				log.Warning(fmt.Sprintf("incomplete ServiceInstance [%s] record, marking job as failed", instance.ID))
 				// skip to the next item
 				continue
 			}
 
-			pjob := NewProvisionJob(instance, a.clusterConfig, a.log)
+			pjob := NewProvisionJob(instance, a.clusterConfig)
 
 			// Need to use the same token as before, since that's what the
 			// catalog will try to ping.
@@ -329,31 +329,31 @@ func (a AnsibleBroker) Recover() (string, error) {
 			a.dao.SetState(instanceID, apb.JobState{Token: rs.State.Token, State: apb.StateInProgress})
 		} else {
 			// YES, we have a podname
-			a.log.Info(fmt.Sprintf("We have a pod to recover: %s", rs.State.Podname))
+			log.Info(fmt.Sprintf("We have a pod to recover: %s", rs.State.Podname))
 
 			// TODO: ExtractCredentials is doing more than it should
 			// be and it needs to be broken up.
 
 			// did the pod finish?
-			extCreds, extErr := apb.ExtractCredentials(rs.State.Podname, instance.Context.Namespace, a.log)
+			extCreds, extErr := apb.ExtractCredentials(rs.State.Podname, instance.Context.Namespace)
 
 			// NO, pod failed.
 			// TODO: do we restart the job or mark it as failed?
 			if extErr != nil {
-				a.log.Error("broker::Recover error occurred.")
-				a.log.Error("%s", extErr.Error())
+				log.Error("broker::Recover error occurred.")
+				log.Error("%s", extErr.Error())
 				return "", extErr
 			}
 
 			// YES, pod finished we have creds
 			if extCreds != nil {
-				a.log.Debug("broker::Recover, got ExtractedCredentials!")
+				log.Debug("broker::Recover, got ExtractedCredentials!")
 				a.dao.SetState(instanceID, apb.JobState{Token: rs.State.Token,
 					State: apb.StateSucceeded, Podname: rs.State.Podname})
 				err = a.dao.SetExtractedCredentials(instanceID, extCreds)
 				if err != nil {
-					a.log.Error("Could not persist extracted credentials")
-					a.log.Error("%s", err.Error())
+					log.Error("Could not persist extracted credentials")
+					log.Error("%s", err.Error())
 					return "", err
 				}
 			}
@@ -364,13 +364,13 @@ func (a AnsibleBroker) Recover() (string, error) {
 
 	//binding
 
-	a.log.Info("Recovery complete")
+	log.Info("Recovery complete")
 	return "recover called", nil
 }
 
 // Catalog - returns the catalog of services defined
 func (a AnsibleBroker) Catalog() (*CatalogResponse, error) {
-	a.log.Info("AnsibleBroker::Catalog")
+	log.Info("AnsibleBroker::Catalog")
 
 	var specs []*apb.Spec
 	var err error
@@ -378,7 +378,7 @@ func (a AnsibleBroker) Catalog() (*CatalogResponse, error) {
 	dir := "/spec"
 
 	if specs, err = a.dao.BatchGetSpecs(dir); err != nil {
-		a.log.Error("Something went real bad trying to retrieve batch specs...")
+		log.Error("Something went real bad trying to retrieve batch specs...")
 		return nil, err
 	}
 
@@ -485,7 +485,7 @@ func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, 
 		return nil, errors.New(errMsg)
 	}
 
-	a.log.Debugf(
+	log.Debugf(
 		"Injecting PlanID as parameter: { %s: %s }",
 		planParameterKey, req.PlanID)
 	parameters[planParameterKey] = req.PlanID
@@ -508,10 +508,10 @@ func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, 
 		//This will use the package to make sure that if the type is changed away from []byte it can still be evaluated.
 		if uuid.Equal(si.ID, serviceInstance.ID) {
 			if reflect.DeepEqual(si.Parameters, serviceInstance.Parameters) {
-				a.log.Debug("already have this instance returning 200")
+				log.Debug("already have this instance returning 200")
 				return &ProvisionResponse{}, ErrorAlreadyProvisioned
 			}
-			a.log.Info("we have a duplicate instance with parameters that differ, returning 409 conflict")
+			log.Info("we have a duplicate instance with parameters that differ, returning 409 conflict")
 			return nil, ErrorDuplicate
 		}
 	}
@@ -526,13 +526,13 @@ func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, 
 	var token string
 
 	if async {
-		a.log.Info("ASYNC provisioning in progress")
+		log.Info("ASYNC provisioning in progress")
 		// asyncronously provision and return the token for the lastoperation
-		pjob := NewProvisionJob(serviceInstance, a.clusterConfig, a.log)
+		pjob := NewProvisionJob(serviceInstance, a.clusterConfig)
 
 		token, err = a.engine.StartNewJob("", pjob, ProvisionTopic)
 		if err != nil {
-			a.log.Error("Failed to start new job for async provision\n%s", err.Error())
+			log.Error("Failed to start new job for async provision\n%s", err.Error())
 			return nil, err
 		}
 
@@ -541,24 +541,24 @@ func (a AnsibleBroker) Provision(instanceUUID uuid.UUID, req *ProvisionRequest, 
 		a.dao.SetState(instanceUUID.String(), apb.JobState{Token: token, State: apb.StateInProgress})
 	} else {
 		// TODO: do we want to do synchronous provisioning?
-		a.log.Info("reverting to synchronous provisioning in progress")
-		podName, extCreds, err := apb.Provision(serviceInstance, a.clusterConfig, a.log)
+		log.Info("reverting to synchronous provisioning in progress")
+		podName, extCreds, err := apb.Provision(serviceInstance, a.clusterConfig)
 
-		sm := apb.NewServiceAccountManager(a.log)
-		a.log.Info("Destroying APB sandbox...")
+		sm := apb.NewServiceAccountManager()
+		log.Info("Destroying APB sandbox...")
 		sm.DestroyApbSandbox(podName, context.Namespace)
 		if err != nil {
-			a.log.Error("broker::Provision error occurred.")
-			a.log.Error("%s", err.Error())
+			log.Error("broker::Provision error occurred.")
+			log.Error("%s", err.Error())
 			return nil, err
 		}
 
 		if extCreds != nil {
-			a.log.Debug("broker::Provision, got ExtractedCredentials!")
+			log.Debug("broker::Provision, got ExtractedCredentials!")
 			err = a.dao.SetExtractedCredentials(instanceUUID.String(), extCreds)
 			if err != nil {
-				a.log.Error("Could not persist extracted credentials")
-				a.log.Error("%s", err.Error())
+				log.Error("Could not persist extracted credentials")
+				log.Error("%s", err.Error())
 				return nil, err
 			}
 		}
@@ -603,13 +603,13 @@ func (a AnsibleBroker) Deprovision(
 	var token string
 
 	if async {
-		a.log.Info("ASYNC deprovision in progress")
+		log.Info("ASYNC deprovision in progress")
 		// asynchronously provision and return the token for the lastoperation
-		dpjob := NewDeprovisionJob(instance, a.clusterConfig, a.dao, a.log)
+		dpjob := NewDeprovisionJob(instance, a.clusterConfig, a.dao)
 
 		token, err = a.engine.StartNewJob("", dpjob, DeprovisionTopic)
 		if err != nil {
-			a.log.Error("Failed to start new job for async deprovision\n%s", err.Error())
+			log.Error("Failed to start new job for async deprovision\n%s", err.Error())
 			return nil, err
 		}
 
@@ -620,13 +620,13 @@ func (a AnsibleBroker) Deprovision(
 	}
 
 	// TODO: do we want to do synchronous deprovisioning?
-	a.log.Info("Synchronous deprovision in progress")
-	podName, err := apb.Deprovision(instance, a.clusterConfig, a.log)
+	log.Info("Synchronous deprovision in progress")
+	podName, err := apb.Deprovision(instance, a.clusterConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	err = cleanupDeprovision(podName, instance, a.dao, a.log)
+	err = cleanupDeprovision(podName, instance, a.dao)
 	if err != nil {
 		return nil, err
 	}
@@ -637,7 +637,7 @@ func (a AnsibleBroker) validateDeprovision(instance *apb.ServiceInstance) error 
 	// -> Lookup bindings by instance ID; 400 if any are active, related issue:
 	//    https://github.com/openservicebrokerapi/servicebroker/issues/127
 	if len(instance.BindingIDs) > 0 {
-		a.log.Debugf("Found bindings with ids: %v", instance.BindingIDs)
+		log.Debugf("Found bindings with ids: %v", instance.BindingIDs)
 		return ErrorBindingExists
 	}
 	// TODO WHAT TO DO IF ASYNC BIND/PROVISION IN PROGRESS
@@ -671,7 +671,7 @@ func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *
 		return nil, errors.New(errMsg)
 	}
 
-	a.log.Debugf(
+	log.Debugf(
 		"Injecting PlanID as parameter: { %s: %s }",
 		planParameterKey, req.PlanID)
 	params[planParameterKey] = req.PlanID
@@ -695,12 +695,12 @@ func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *
 	if bi, err := a.dao.GetBindInstance(bindingUUID.String()); err == nil {
 		if uuid.Equal(bi.ID, bindingInstance.ID) {
 			if reflect.DeepEqual(bi.Parameters, bindingInstance.Parameters) {
-				a.log.Debug("already have this binding instance, returning 200")
+				log.Debug("already have this binding instance, returning 200")
 				return &BindResponse{}, ErrorAlreadyProvisioned
 			}
 
 			// parameters are different
-			a.log.Info("duplicate binding instance diff params, returning 409 conflict")
+			log.Info("duplicate binding instance diff params, returning 409 conflict")
 			return nil, ErrorDuplicate
 		}
 	}
@@ -711,7 +711,7 @@ func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *
 
 	provExtCreds, err := a.dao.GetExtractedCredentials(instanceUUID.String())
 	if err != nil && !client.IsKeyNotFound(err) {
-		a.log.Warningf("unable to retrieve provision time credentials - %v", err)
+		log.Warningf("unable to retrieve provision time credentials - %v", err)
 	}
 
 	// Add the DB Credentials this will allow the apb to use these credentials if it so chooses.
@@ -725,18 +725,18 @@ func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *
 	var podName string
 	var bindExtCreds *apb.ExtractedCredentials
 	if a.brokerConfig.LaunchApbOnBind {
-		a.log.Info("Broker configured to run APB bind")
-		podName, bindExtCreds, err = apb.Bind(instance, &params, a.clusterConfig, a.log)
+		log.Info("Broker configured to run APB bind")
+		podName, bindExtCreds, err = apb.Bind(instance, &params, a.clusterConfig)
 
-		sm := apb.NewServiceAccountManager(a.log)
-		a.log.Info("Destroying APB sandbox...")
+		sm := apb.NewServiceAccountManager()
+		log.Info("Destroying APB sandbox...")
 		sm.DestroyApbSandbox(podName, instance.Context.Namespace)
 
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		a.log.Warning("Broker configured to *NOT* launch and run APB bind")
+		log.Warning("Broker configured to *NOT* launch and run APB bind")
 	}
 	instance.AddBinding(bindingUUID)
 	if err := a.dao.SetServiceInstance(instanceUUID.String(), instance); err != nil {
@@ -744,7 +744,7 @@ func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *
 	}
 	// Can't bind to anything if we have nothing to return to the catalog
 	if provExtCreds == nil && bindExtCreds == nil {
-		a.log.Errorf("No extracted credentials found from provision or bind instance ID: %s",
+		log.Errorf("No extracted credentials found from provision or bind instance ID: %s",
 			instanceUUID.String())
 		return nil, errors.New("No credentials available")
 	}
@@ -752,7 +752,7 @@ func (a AnsibleBroker) Bind(instanceUUID uuid.UUID, bindingUUID uuid.UUID, req *
 	if bindExtCreds != nil {
 		err = a.dao.SetExtractedCredentials(bindingUUID.String(), bindExtCreds)
 		if err != nil {
-			a.log.Errorf("Could not persist extracted credentials - %v", err)
+			log.Errorf("Could not persist extracted credentials - %v", err)
 			return nil, err
 		}
 		return &BindResponse{Credentials: bindExtCreds.Credentials}, nil
@@ -783,7 +783,7 @@ func (a AnsibleBroker) Unbind(
 	// Add the credentials to the parameters so that an APB can choose what
 	// it would like to do.
 	if provExtCreds == nil && bindExtCreds == nil {
-		a.log.Warningf("Unable to find credentials for instance id: %v and binding id: %v"+
+		log.Warningf("Unable to find credentials for instance id: %v and binding id: %v"+
 			" something may have gone wrong. Proceeding with unbind.",
 			instanceUUID, bindingUUID)
 	}
@@ -795,7 +795,7 @@ func (a AnsibleBroker) Unbind(
 	}
 	serviceInstance, err := a.getServiceInstance(instanceUUID)
 	if err != nil {
-		a.log.Debugf("Service instance with id %s does not exist", instanceUUID.String())
+		log.Debugf("Service instance with id %s does not exist", instanceUUID.String())
 		return nil, err
 	}
 	if serviceInstance.Parameters != nil {
@@ -803,12 +803,12 @@ func (a AnsibleBroker) Unbind(
 	}
 	// only launch apb if we are always launching the APB.
 	if a.brokerConfig.LaunchApbOnBind {
-		err = apb.Unbind(serviceInstance, &params, a.clusterConfig, a.log)
+		err = apb.Unbind(serviceInstance, &params, a.clusterConfig)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		a.log.Warning("Broker configured to *NOT* launch and run APB unbind")
+		log.Warning("Broker configured to *NOT* launch and run APB unbind")
 	}
 
 	if bindExtCreds != nil {
@@ -849,15 +849,15 @@ func (a AnsibleBroker) LastOperation(instanceUUID uuid.UUID, req *LastOperationR
 
 		if async, provision: it should create a Job that calls apb.Provision. And write the output to etcd.
 	*/
-	a.log.Debug(fmt.Sprintf("service_id: %s", req.ServiceID)) // optional
-	a.log.Debug(fmt.Sprintf("plan_id: %s", req.PlanID))       // optional
-	a.log.Debug(fmt.Sprintf("operation:  %s", req.Operation)) // this is provided with the provision. task id from the work_engine
+	log.Debug(fmt.Sprintf("service_id: %s", req.ServiceID)) // optional
+	log.Debug(fmt.Sprintf("plan_id: %s", req.PlanID))       // optional
+	log.Debug(fmt.Sprintf("operation:  %s", req.Operation)) // this is provided with the provision. task id from the work_engine
 
 	// TODO:validate the format to avoid some sort of injection hack
 	jobstate, err := a.dao.GetState(instanceUUID.String(), req.Operation)
 	if err != nil {
 		// not sure what we do with the error if we can't find the state
-		a.log.Error(fmt.Sprintf("problem reading job state: [%s]. error: [%v]", instanceUUID, err.Error()))
+		log.Error(fmt.Sprintf("problem reading job state: [%s]. error: [%v]", instanceUUID, err.Error()))
 	}
 
 	state := StateToLastOperation(jobstate.State)
@@ -866,9 +866,9 @@ func (a AnsibleBroker) LastOperation(instanceUUID uuid.UUID, req *LastOperationR
 
 //AddSpec - adding the spec to the catalog for local development
 func (a AnsibleBroker) AddSpec(spec apb.Spec) (*CatalogResponse, error) {
-	a.log.Debug("broker::AddSpec")
+	log.Debug("broker::AddSpec")
 	addNameAndIDForSpec([]*apb.Spec{&spec}, apbPushRegName)
-	a.log.Debugf("Generated name for pushed APB: [%s], ID: [%s]", spec.FQName, spec.ID)
+	log.Debugf("Generated name for pushed APB: [%s], ID: [%s]", spec.FQName, spec.ID)
 
 	if err := a.dao.SetSpec(spec.ID, &spec); err != nil {
 		return nil, err
@@ -884,12 +884,12 @@ func (a AnsibleBroker) RemoveSpec(specID string) error {
 		return ErrorNotFound
 	}
 	if err != nil {
-		a.log.Error("Something went real bad trying to retrieve spec for deletion... - %v", err)
+		log.Error("Something went real bad trying to retrieve spec for deletion... - %v", err)
 		return err
 	}
 	err = a.dao.DeleteSpec(spec.ID)
 	if err != nil {
-		a.log.Error("Something went real bad trying to delete spec... - %v", err)
+		log.Error("Something went real bad trying to delete spec... - %v", err)
 		return err
 	}
 	return nil
@@ -900,18 +900,18 @@ func (a AnsibleBroker) RemoveSpecs() error {
 	dir := "/spec"
 	specs, err := a.dao.BatchGetSpecs(dir)
 	if err != nil {
-		a.log.Error("Something went real bad trying to retrieve batch specs for deletion... - %v", err)
+		log.Error("Something went real bad trying to retrieve batch specs for deletion... - %v", err)
 		return err
 	}
 	err = a.dao.BatchDeleteSpecs(specs)
 	if err != nil {
-		a.log.Error("Something went real bad trying to delete batch specs... - %v", err)
+		log.Error("Something went real bad trying to delete batch specs... - %v", err)
 		return err
 	}
 	return nil
 }
 
-func ocLogin(log *logging.Logger, args ...string) error {
+func ocLogin(args ...string) error {
 	log.Debug("Logging into openshift...")
 
 	fullArgs := append([]string{"login"}, args...)

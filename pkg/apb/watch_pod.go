@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/openshift/ansible-service-broker/pkg/runtime"
-
-	logging "github.com/op/go-logging"
 )
 
 const (
@@ -16,7 +14,7 @@ const (
 	podStatusError     = "Error"
 )
 
-func watchPod(podName string, namespace string, log *logging.Logger) (string, error) {
+func watchPod(podName string, namespace string) (string, error) {
 	log.Debugf(
 		"Watching pod [ %s ] in namespace [ %s ] for completion", podName, namespace)
 

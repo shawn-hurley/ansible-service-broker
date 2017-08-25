@@ -1,9 +1,11 @@
 package clients
 
 import (
-	etcd "github.com/coreos/etcd/client"
-	k8s "k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 	"sync"
+
+	etcd "github.com/coreos/etcd/client"
+	"github.com/openshift/ansible-service-broker/pkg/util"
+	k8s "k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 )
 
 var instances struct {
@@ -15,3 +17,5 @@ var once struct {
 	Etcd       sync.Once
 	Kubernetes sync.Once
 }
+
+var log = util.NewLog("clients")

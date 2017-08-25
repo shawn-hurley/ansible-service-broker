@@ -11,13 +11,14 @@ import (
 	"github.com/openshift/ansible-service-broker/pkg/broker"
 	"github.com/openshift/ansible-service-broker/pkg/dao"
 	"github.com/openshift/ansible-service-broker/pkg/registries"
+	"github.com/openshift/ansible-service-broker/pkg/util"
 )
 
 // Config - The base config for the pieces of the applcation
 type Config struct {
 	Registry   []registries.Config
 	Dao        dao.Config
-	Log        LogConfig
+	Log        util.LogConfig
 	Openshift  apb.ClusterConfig
 	ConfigFile string
 	Broker     broker.Config

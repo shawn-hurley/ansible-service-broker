@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	ft "github.com/openshift/ansible-service-broker/pkg/fusortest"
 	"github.com/openshift/ansible-service-broker/pkg/registries/adapters"
@@ -129,7 +130,8 @@ func setUp() Registry {
 	c := Config{}
 	r = Registry{config: c,
 		adapter: a,
-		filter:  filter}
+		filter:  filter,
+		log:     logging.MustGetLogger("test-registry")}
 	return r
 }
 
@@ -144,7 +146,8 @@ func setUpNoPlans() Registry {
 	c := Config{}
 	r = Registry{config: c,
 		adapter: a,
-		filter:  filter}
+		filter:  filter,
+		log:     logging.MustGetLogger("test-reg")}
 	return r
 }
 

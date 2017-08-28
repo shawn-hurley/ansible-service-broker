@@ -8,14 +8,13 @@ import (
 	"strings"
 	"sync"
 
+	logging "github.com/op/go-logging"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/openshift/ansible-service-broker/pkg/registries/adapters"
 	"github.com/openshift/ansible-service-broker/pkg/util"
 )
 
 var regex = regexp.MustCompile(`[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*`)
-
-var log = util.NewLog("registries")
 
 // Config - Configuration for the registry
 type Config struct {
@@ -48,13 +47,14 @@ type Registry struct {
 	config  Config
 	adapter adapters.Adapter
 	filter  Filter
+	log     *logging.Logger
 }
 
 // LoadSpecs - Load the specs for the registry.
 func (r Registry) LoadSpecs() ([]*apb.Spec, int, error) {
 	imageNames, err := r.adapter.GetImageNames()
 	if err != nil {
-		log.Errorf("unable to retrieve image names for registry %v - %v",
+		r.log.Errorf("unable to retrieve image names for registry %v - %v",
 			r.config.Name, err)
 		return []*apb.Spec{}, 0, err
 	}
@@ -62,12 +62,12 @@ func (r Registry) LoadSpecs() ([]*apb.Spec, int, error) {
 	imageNames = registryFilterImagesForAPBs(imageNames)
 	validNames, filteredNames := r.filter.Run(imageNames)
 
-	log.Debug("Filter applied against registry: %s", r.config.Name)
+	r.log.Debug("Filter applied against registry: %s", r.config.Name)
 
 	if len(validNames) != 0 {
-		log.Debugf("APBs passing white/blacklist filter:")
+		r.log.Debugf("APBs passing white/blacklist filter:")
 		for _, name := range validNames {
-			log.Debugf("-> %s", name)
+			r.log.Debugf("-> %s", name)
 		}
 	}
 
@@ -78,28 +78,28 @@ func (r Registry) LoadSpecs() ([]*apb.Spec, int, error) {
 			for _, name := range filteredNames {
 				buffer.WriteString(fmt.Sprintf("-> %s", name))
 			}
-			log.Infof(buffer.String())
+			r.log.Infof(buffer.String())
 		}()
 	}
 
 	// Debug output filtered out names.
 	specs, err := r.adapter.FetchSpecs(validNames)
 	if err != nil {
-		log.Errorf("unable to fetch specs for registry %v - %v",
+		r.log.Errorf("unable to fetch specs for registry %v - %v",
 			r.config.Name, err)
 		return []*apb.Spec{}, 0, err
 	}
 
-	log.Infof("Validating specs...")
-	validatedSpecs := validateSpecs(specs)
+	r.log.Infof("Validating specs...")
+	validatedSpecs := validateSpecs(specs, r.log)
 	failedSpecsCount := len(specs) - len(validatedSpecs)
 
 	if failedSpecsCount != 0 {
-		log.Warningf(
+		r.log.Warningf(
 			"%d specs of %d discovered specs failed validation from registry: %s",
 			failedSpecsCount, len(specs), r.adapter.RegistryName())
 	} else {
-		log.Notice("All specs passed validation!")
+		r.log.Notice("All specs passed validation!")
 	}
 
 	return validatedSpecs, len(imageNames), nil
@@ -131,6 +131,7 @@ func (r Registry) RegistryName() string {
 // NewRegistry - Create a new registry from the registry config.
 func NewRegistry(config Config) (Registry, error) {
 	var adapter adapters.Adapter
+	log := util.NewLog(config.Name)
 
 	log.Info("== REGISTRY CX == ")
 	log.Info(fmt.Sprintf("Name: %s", config.Name))
@@ -168,11 +169,12 @@ func NewRegistry(config Config) (Registry, error) {
 
 	return Registry{config: config,
 		adapter: adapter,
-		filter:  createFilter(config),
+		filter:  createFilter(config, log),
+		log:     log,
 	}, nil
 }
 
-func createFilter(config Config) Filter {
+func createFilter(config Config, log *logging.Logger) Filter {
 	log.Debug("Creating filter for registry: %s", config.Name)
 	log.Debug("whitelist: %v", config.WhiteList)
 	log.Debug("blacklist: %v", config.BlackList)
@@ -202,7 +204,7 @@ func createFilter(config Config) Filter {
 	return filter
 }
 
-func validateSpecs(inSpecs []*apb.Spec) []*apb.Spec {
+func validateSpecs(inSpecs []*apb.Spec, log *logging.Logger) []*apb.Spec {
 	var wg sync.WaitGroup
 	wg.Add(len(inSpecs))
 
@@ -216,7 +218,7 @@ func validateSpecs(inSpecs []*apb.Spec) []*apb.Spec {
 	for _, spec := range inSpecs {
 		go func(s *apb.Spec) {
 			defer wg.Done()
-			ok, failReason := validateSpecPlans(s)
+			ok, failReason := validateSpecPlans(s, log)
 			out <- resultT{ok, s, failReason}
 		}(spec)
 	}
@@ -242,7 +244,7 @@ func validateSpecs(inSpecs []*apb.Spec) []*apb.Spec {
 	return validSpecs
 }
 
-func validateSpecPlans(spec *apb.Spec) (bool, string) {
+func validateSpecPlans(spec *apb.Spec, log *logging.Logger) (bool, string) {
 	// Specs must have at least one plan
 	if !(len(spec.Plans) > 0) {
 		return false, "Specs must have at least one plan"

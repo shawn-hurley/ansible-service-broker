@@ -35,9 +35,9 @@ type failedRegexp struct {
 	err   error
 }
 
-// Filter - will handle the filtering by using a black list and white list
+// filter - will handle the filtering by using a black list and white list
 // of regular expressions.
-type Filter struct {
+type filter struct {
 	whitelist         []string
 	blacklist         []string
 	whiteRegexp       []*regexp.Regexp
@@ -47,7 +47,7 @@ type Filter struct {
 }
 
 // Init - Initializes Filter, precompiling regex
-func (f *Filter) Init() {
+func (f *filter) Init() {
 	compiled, failed := compileRegexp(f.whitelist)
 	f.whiteRegexp = compiled
 	f.failedWhiteRegexp = failed
@@ -78,7 +78,7 @@ func compileRegexp(regexStrs []string) ([]*regexp.Regexp, []failedRegexp) {
 }
 
 // Run - Executes filter based on white and blacklists
-func (f *Filter) Run(totalList []string) ([]string, []string) {
+func (f *filter) Run(totalList []string) ([]string, []string) {
 	filterMode := f.getFilterMode()
 	if filterMode == filterModeNone {
 		return nil, totalList
@@ -92,7 +92,7 @@ func (f *Filter) Run(totalList []string) ([]string, []string) {
 }
 
 // FilterMode - FilterMode getter
-func (f *Filter) getFilterMode() filterMode {
+func (f *filter) getFilterMode() filterMode {
 	if len(f.whiteRegexp) != 0 && len(f.blackRegexp) != 0 {
 		return filterModeBoth
 	} else if len(f.whiteRegexp) != 0 {

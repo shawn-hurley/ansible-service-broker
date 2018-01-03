@@ -12,7 +12,8 @@ registry:
     org: shurley
   - type: mock
     name: mock
-  - type: makes_no_sense 
+  - type: makes_no_sense
     name: makes-no-sense
-  - type: makes_no_sense 
+  - type: makes_no_sense
     name: makes_no_sense
+  - name: nsa

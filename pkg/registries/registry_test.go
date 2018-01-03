@@ -188,8 +188,8 @@ func setUp() Registry {
 		Specs:  []*apb.Spec{&s},
 		Called: map[string]bool{},
 	}
-	filter := Filter{}
-	c := Config{}
+	filter := filter{}
+	c := registryConfig{}
 	r = Registry{config: c,
 		adapter: a,
 		filter:  filter}
@@ -203,8 +203,8 @@ func setUpNoPlans() Registry {
 		Specs:  []*apb.Spec{&noPlansSpec},
 		Called: map[string]bool{},
 	}
-	filter := Filter{}
-	c := Config{}
+	filter := filter{}
+	c := registryConfig{}
 	r = Registry{config: c,
 		adapter: a,
 		filter:  filter}
@@ -218,8 +218,8 @@ func setUpNoVersion() Registry {
 		Specs:  []*apb.Spec{&noVersionSpec},
 		Called: map[string]bool{},
 	}
-	filter := Filter{}
-	c := Config{}
+	filter := filter{}
+	c := registryConfig{}
 	r = Registry{config: c,
 		adapter: a,
 		filter:  filter}
@@ -233,8 +233,8 @@ func setUpBadVersion() Registry {
 		Specs:  []*apb.Spec{&badVersionSpec},
 		Called: map[string]bool{},
 	}
-	filter := Filter{}
-	c := Config{}
+	filter := filter{}
+	c := registryConfig{}
 	r = Registry{config: c,
 		adapter: a,
 		filter:  filter}
@@ -248,8 +248,8 @@ func setUpBadRuntime() Registry {
 		Specs:  []*apb.Spec{&badRuntimeSpec},
 		Called: map[string]bool{},
 	}
-	filter := Filter{}
-	c := Config{}
+	filter := filter{}
+	c := registryConfig{}
 	r = Registry{config: c,
 		adapter: a,
 		filter:  filter}
@@ -334,7 +334,7 @@ func TestNewRegistryRHCC(t *testing.T) {
 	if err != nil {
 		ft.AssertTrue(t, false)
 	}
-	reg, err := NewRegistry(c.GetSubConfig("registry.rhcc"), "")
+	reg, err := NewRegistry(c.GetSubConfig("registry.rhcc"), nil, "")
 	if err != nil {
 		ft.AssertTrue(t, false)
 	}
@@ -347,7 +347,7 @@ func TestNewRegistryDockerHub(t *testing.T) {
 	if err != nil {
 		ft.AssertTrue(t, false)
 	}
-	reg, err := NewRegistry(c.GetSubConfig("registry.dh"), "")
+	reg, err := NewRegistry(c.GetSubConfig("registry.dh"), nil, "")
 	if err != nil {
 		ft.AssertTrue(t, false)
 	}
@@ -360,7 +360,7 @@ func TestNewRegistryMock(t *testing.T) {
 	if err != nil {
 		ft.AssertTrue(t, false)
 	}
-	reg, err := NewRegistry(c.GetSubConfig("registry.mock"), "")
+	reg, err := NewRegistry(c.GetSubConfig("registry.mock"), nil, "")
 	if err != nil {
 		ft.AssertTrue(t, false)
 	}
@@ -377,13 +377,13 @@ func TestPanicOnUnknow(t *testing.T) {
 		}
 	}()
 	c, _ := config.CreateConfig("testdata/registry.yaml")
-	r, err := NewRegistry(c.GetSubConfig("registry.makes-no-sense"), "")
+	r, err := NewRegistry(c.GetSubConfig("registry.makes-no-sense"), nil, "")
 	fmt.Printf("%#v\n\n %v\n", r, err)
 }
 
 func TestValidateName(t *testing.T) {
 	c, _ := config.CreateConfig("testdata/registry.yaml")
-	_, err := NewRegistry(c.GetSubConfig("registry.makes_no_sense"), "")
+	_, err := NewRegistry(c.GetSubConfig("registry.makes_no_sense"), nil, "")
 	if err == nil {
 		ft.AssertTrue(t, false)
 	}
@@ -410,4 +410,33 @@ func TestVersionCheck(t *testing.T) {
 	ft.AssertFalse(t, isCompatibleVersion("1", "1.0", "3.0"))
 	// Test invalid version
 	ft.AssertFalse(t, isCompatibleVersion("2.5", "3.0", "4.0"))
+}
+
+type fakeAdapter struct{}
+
+func (f fakeAdapter) GetImageNames() ([]string, error) {
+	return []string{}, nil
+}
+
+func (f fakeAdapter) FetchSpecs(names []string) ([]*apb.Spec, error) {
+	return []*apb.Spec{}, nil
+}
+
+func (f fakeAdapter) RegistryName() string {
+	return ""
+}
+
+func TestAdapterWithConfiguration(t *testing.T) {
+	c, err := config.CreateConfig("testdata/registry.yaml")
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	f := fakeAdapter{}
+	reg, err := NewRegistry(c.GetSubConfig("registry.nsa"), f)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	_, ok := reg.adapter.(fakeAdapter)
+	ft.AssertTrue(t, ok)
 }

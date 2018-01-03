@@ -37,7 +37,6 @@ import (
 	authenticationclient "k8s.io/client-go/kubernetes/typed/authentication/v1beta1"
 	"k8s.io/kubernetes/pkg/apis/rbac"
 
-	"github.com/jessevdk/go-flags"
 	"github.com/openshift/ansible-service-broker/pkg/apb"
 	"github.com/openshift/ansible-service-broker/pkg/auth"
 	"github.com/openshift/ansible-service-broker/pkg/broker"
@@ -48,7 +47,6 @@ import (
 	"github.com/openshift/ansible-service-broker/pkg/registries"
 	agnosticruntime "github.com/openshift/ansible-service-broker/pkg/runtime"
 	logutil "github.com/openshift/ansible-service-broker/pkg/util/logging"
-	"github.com/openshift/ansible-service-broker/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -68,10 +66,10 @@ const (
 	defaultClusterURLPreFix = "/ansible-service-broker"
 )
 
-// App - All the application pieces that are installed.
-type App struct {
+// ASB - The Ansible Service Broker(ASB) application.
+// All the application pieces that are initiliazed are contained here.
+type ASB struct {
 	broker   *broker.AnsibleBroker
-	args     Args
 	config   *config.Config
 	dao      *dao.Dao
 	registry []registries.Registry
@@ -79,7 +77,6 @@ type App struct {
 }
 
 func apiServer(config *config.Config,
-	args Args,
 	providers []auth.Provider) (*genericapiserver.GenericAPIServer, error) {
 
 	log.Debug("calling NewSecureServingOptions")
@@ -133,47 +130,19 @@ func apiServer(config *config.Config,
 	return serverConfig.Complete(s).New("ansible-service-broker", genericapiserver.EmptyDelegate)
 }
 
-// CreateApp - Creates the application
-func CreateApp() App {
+// CreateASB - Creates the asb application
+func CreateASB(regs []registries.Registry, conf *config.Config) ASB {
 	var err error
-	app := App{}
-
-	// Writing directly to stderr because log has not been bootstrapped
-	if app.args, err = CreateArgs(); err != nil {
-		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
-			os.Exit(0)
-		} else {
-			os.Exit(1)
-		}
-	}
-
-	if app.args.Version {
-		fmt.Println(version.Version)
-		os.Exit(0)
-	}
+	app := ASB{}
+	app.config = conf
+	app.registry = regs
 
 	fmt.Println("============================================================")
-	fmt.Println("==           Starting Ansible Service Broker...           ==")
+	fmt.Println("==           Creating Ansible Service Broker...           ==")
 	fmt.Println("============================================================")
 
 	// TODO: Let's take all these validations and delegate them to the client
 	// pkg.
-	if app.config, err = config.CreateConfig(app.args.ConfigFile); err != nil {
-		os.Stderr.WriteString("ERROR: Failed to read config file\n")
-		os.Stderr.WriteString(err.Error() + "\n")
-		os.Exit(1)
-	}
-	c := logutil.LogConfig{
-		LogFile: app.config.GetString("log.logfile"),
-		Stdout:  app.config.GetBool("log.stdout"),
-		Level:   app.config.GetString("log.level"),
-		Color:   app.config.GetBool("log.color"),
-	}
-	if err = logutil.InitializeLog(c); err != nil {
-		os.Stderr.WriteString("ERROR: Failed to initialize logger\n")
-		os.Stderr.WriteString(err.Error())
-		os.Exit(1)
-	}
 
 	// Initializing clients as soon as we have deps ready.
 	err = initClients(app.config)
@@ -197,17 +166,18 @@ func CreateApp() App {
 		log.Error(err.Error())
 		os.Exit(1)
 	}
-
-	log.Debug("Connecting Registry")
-	for name := range app.config.GetSubConfig("registry").ToMap() {
-		reg, err := registries.NewRegistry(app.config.GetSubConfig(fmt.Sprintf("%v.%v", "registry", name)),
-			app.config.GetString("openshift.namespace"))
-		if err != nil {
-			log.Errorf(
-				"Failed to initialize %v Registry err - %v \n", name, err)
-			os.Exit(1)
+	if len(app.registry) == 0 {
+		log.Debug("Found no registries that were passed in.")
+		log.Debug("Attempting to load registries from the configs registry section now.")
+		for name := range app.config.GetSubConfig("registry").ToMap() {
+			reg, err := registries.NewRegistry(app.config.GetSubConfig(fmt.Sprintf("%v.%v", "registry", name)), nil, app.config.GetString("openshift.namespace"))
+			if err != nil {
+				log.Errorf(
+					"Failed to initialize %v Registry err - %v \n", name, err)
+				os.Exit(1)
+			}
+			app.registry = append(app.registry, reg)
 		}
-		app.registry = append(app.registry, reg)
 	}
 
 	log.Debug("Initializing WorkEngine")
@@ -267,7 +237,7 @@ func CreateApp() App {
 // Recover - Recover the application
 // TODO: Make this a go routine once we have a strong and well tested
 // recovery sequence.
-func (a *App) Recover() {
+func (a *ASB) Recover() {
 	msg, err := a.broker.Recover()
 
 	if err != nil {
@@ -278,9 +248,12 @@ func (a *App) Recover() {
 }
 
 // Start - Will start the application to listen on the specified port.
-func (a *App) Start() {
+func (a *ASB) Start() {
 	// TODO: probably return an error or some sort of message such that we can
 	// see if we need to go any further.
+	fmt.Println("============================================================")
+	fmt.Println("==           Starting Ansible Service Broker...           ==")
+	fmt.Println("============================================================")
 
 	if a.config.GetBool("broker.recovery") {
 		log.Info("Initiating Recovery Process")
@@ -328,7 +301,7 @@ func (a *App) Start() {
 	//Retrieve the auth providers if basic auth is configured.
 	providers := auth.GetProviders(a.config)
 
-	genericserver, servererr := apiServer(a.config, a.args, providers)
+	genericserver, servererr := apiServer(a.config, providers)
 	if servererr != nil {
 		log.Errorf("problem creating apiserver. %v", servererr)
 		panic(servererr)

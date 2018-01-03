@@ -99,7 +99,7 @@ func testSetEq(a []string, b []string) bool {
 }
 
 func TestOnlyBlacklist(t *testing.T) {
-	filter := Filter{whitelist: []string{},
+	filter := filter{whitelist: []string{},
 		blacklist: testGetRegexFromFile(testBlacklistFile)}
 	filter.Init()
 
@@ -128,7 +128,7 @@ func TestOnlyBlacklist(t *testing.T) {
 }
 
 func TestOnlyWhitelist(t *testing.T) {
-	filter := Filter{whitelist: testGetRegexFromFile(testWhitelistFile),
+	filter := filter{whitelist: testGetRegexFromFile(testWhitelistFile),
 		blacklist: []string{}}
 	filter.Init()
 
@@ -161,7 +161,7 @@ func TestBlackAndWhitelistOverride(t *testing.T) {
 	// If both a black and whitelist are present and both contain matches,
 	// blacklist will override anything that has passed the whitelist match and
 	// get excluded
-	filter := Filter{
+	filter := filter{
 		whitelist: testGetRegexFromFile(testWhitelistFile),
 		blacklist: testGetRegexFromFile(testBlacklistOverrideFile),
 	}
@@ -194,7 +194,7 @@ func TestBlackAndWhitelistOverride(t *testing.T) {
 func TestBlackAndWhitelistNoOverride(t *testing.T) {
 	// Both lists set, but no overlap between sets. foo-apb should *not*
 	// be filtered compared to the Override case
-	filter := Filter{
+	filter := filter{
 		whitelist: testGetRegexFromFile(testWhitelistFile),
 		blacklist: testGetRegexFromFile(testBlacklistFile),
 	}

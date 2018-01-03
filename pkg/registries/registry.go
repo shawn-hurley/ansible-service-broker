@@ -43,7 +43,7 @@ var regex = regexp.MustCompile(`[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-
 var log = logutil.NewLog()
 
 // Config - Configuration for the registry
-type Config struct {
+type registryConfig struct {
 	URL string
 	// AuthType is an optional way to declare where credentials for the registry are stored.
 	//   Valid options: `secret`, `file`
@@ -67,7 +67,7 @@ type Config struct {
 }
 
 // Validate - makes sure the registry config is valid.
-func (c Config) Validate() bool {
+func (c registryConfig) Validate() bool {
 	if c.Name == "" {
 		return false
 	}
@@ -99,8 +99,8 @@ func (c Config) Validate() bool {
 // Registry - manages an adapter to retrieve and manage images to specs.
 type Registry struct {
 	adapter adapters.Adapter
-	filter  Filter
-	config  Config
+	filter  filter
+	config  registryConfig
 }
 
 // LoadSpecs - Load the specs for the registry.
@@ -183,9 +183,40 @@ func (r Registry) RegistryName() string {
 }
 
 // NewRegistry - Create a new registry from the registry config.
-func NewRegistry(con *config.Config, asbNamespace string) (Registry, error) {
-	var adapter adapters.Adapter
-	configuration := Config{
+// Configuration values that can be set.
+//
+/* type: Type of a predefined adapter. if adapter is nil this must be set. Values are rhcc, dockerhub, mock, openshift, local_openshift. */
+//
+/* name: Name of the registry. This name must be dns compliant and present. */
+//
+/* fail_on_error: Should your registry fail on an adapter error. */
+//
+/* white_list: This must be present if you would like the registry to add any of the specs. */
+//
+/* black_list: Used to determine specs to keep out of the catalog. */
+//
+/* auth_type: Needed if you are using certain predefined adapters. */
+/* Please note that setting an auth_type and/or auth_name can cause validation errors. */
+/* The rules are auth_type must be file, config, or secret. If type is file or secret then auth_name must be set. */
+/* If type is config then user and pass must be set. */
+//
+/* auth_name: Needed if you are using certain predefined adapters. */
+//
+/* user: Needed if you are using certain predefined adapters. */
+//
+/* pass: Needed if you are using certain predefined adapters. */
+//
+/* url: Needed if you are using certain predefined adapters. */
+//
+/* org: Needed if you are using certain predefined adapters. */
+//
+/* tag: Needed if you are using certain predefined adapters. */
+//
+/* images: Needed if you are using certain predefined adapters. */
+//
+/* namespaces: Needed if you are using certain predefined adapters. */
+func NewRegistry(con *config.Config, adapter adapters.Adapter, asbNamespace string) (Registry, error) {
+	configuration := registryConfig{
 		URL:        con.GetString("url"),
 		User:       con.GetString("user"),
 		Pass:       con.GetString("pass"),
@@ -216,6 +247,15 @@ func NewRegistry(con *config.Config, asbNamespace string) (Registry, error) {
 	log.Info(fmt.Sprintf("Name: %s", configuration.Name))
 	log.Info(fmt.Sprintf("Type: %s", configuration.Type))
 	log.Info(fmt.Sprintf("Url: %s", configuration.URL))
+
+	if adapter != nil {
+		return Registry{
+			adapter: adapter,
+			filter:  createFilter(configuration),
+			config:  configuration,
+		}, nil
+	}
+
 	// Validate URL
 	u, err := url.Parse(configuration.URL)
 	if err != nil {
@@ -256,12 +296,12 @@ func NewRegistry(con *config.Config, asbNamespace string) (Registry, error) {
 	}, nil
 }
 
-func createFilter(config Config) Filter {
+func createFilter(config registryConfig) filter {
 	log.Debug("Creating filter for registry: %s", config.Name)
 	log.Debug("whitelist: %v", config.WhiteList)
 	log.Debug("blacklist: %v", config.BlackList)
 
-	filter := Filter{
+	filter := filter{
 		whitelist: config.WhiteList,
 		blacklist: config.BlackList,
 	}
@@ -393,23 +433,23 @@ func isCompatibleRuntime(specRuntime int, minVersion int, maxVersion int) bool {
 	return specRuntime >= minVersion && specRuntime <= maxVersion
 }
 
-func retrieveRegistryAuth(reg Config, asbNamespace string) (Config, error) {
+func retrieveRegistryAuth(reg registryConfig, asbNamespace string) (registryConfig, error) {
 	var username, password string
 	var err error
 	switch reg.AuthType {
 	case "secret":
 		username, password, err = readSecret(reg.AuthName, asbNamespace)
 		if err != nil {
-			return Config{}, err
+			return registryConfig{}, err
 		}
 	case "file":
 		username, password, err = readFile(reg.AuthName)
 		if err != nil {
-			return Config{}, err
+			return registryConfig{}, err
 		}
 	case "config":
 		if reg.User == "" || reg.Pass == "" {
-			return Config{}, fmt.Errorf("Failed to find registry credentials in config")
+			return registryConfig{}, fmt.Errorf("Failed to find registry credentials in config")
 		}
 		return reg, nil
 	case "":
@@ -417,7 +457,7 @@ func retrieveRegistryAuth(reg Config, asbNamespace string) (Config, error) {
 		username = reg.User
 		password = reg.Pass
 	default:
-		return Config{}, fmt.Errorf("Unrecognized registry AuthType: %s", reg.AuthType)
+		return registryConfig{}, fmt.Errorf("Unrecognized registry AuthType: %s", reg.AuthType)
 	}
 	reg.User = username
 	reg.Pass = password

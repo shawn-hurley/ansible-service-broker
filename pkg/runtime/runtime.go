@@ -43,14 +43,30 @@ type Runtime interface {
 	GetRuntime() string
 	CreateSandbox(string, string, []string, string) (string, error)
 	DestroySandbox(string, string, []string, string, bool, bool)
+	// AddPreCreateSandbox - Adds a pre create sandbox function to the runtime.
+	// Before the sandbox is created all of the functions that have been added here
+	// will be executed. in the order that they were added.
+	AddPreCreateSandbox(f PreSandboxCreate)
+	// AddPostCreateSandbox - Adds a post create sandbox function to the runtime.
+	// Once the sandbox is created all of the functions that have been added here
+	// will be executed in the order they were added.
 	AddPostCreateSandbox(f PostSandboxCreate)
+	// AddPreDestroySandbox - Adds a pre destroy sandbox function to the runtime.
+	// before the sandbox is destroyed all of the functions that have been added here
+	// will be executed in the order they were added.
+	AddPreDestroySandbox(f PreSandboxDestroy)
+	// AddPostDestroySandbox - Adds a post destroy sandbox function to the runtime.
+	// after the sandbox is destroyed all of the functions that have been added here
+	// will be executed in the order they were added.
 	AddPostDestroySandbox(f PostSandboxDestroy)
 }
 
 // Variables for interacting with runtimes
 type provider struct {
 	coe
+	preSandboxCreate   []PreSandboxCreate
 	postSandboxCreate  []PostSandboxCreate
+	preSandboxDestroy  []PreSandboxDestroy
 	postSandboxDestroy []PostSandboxDestroy
 }
 
@@ -152,6 +168,16 @@ func (p provider) CreateSandbox(podName string,
 		return "", err
 	}
 
+	for i, f := range p.preSandboxCreate {
+		log.Debugf("Running pre create sandbox function: %v", i+1)
+		err := f(podName, namespace, targets, apbRole)
+		if err != nil {
+			// Log the error and continue processing hooks. Expect hook to
+			// clean up after itself.
+			log.Warningf("Pre create sandbox function failed with err: %v", err)
+		}
+	}
+
 	err = k8scli.CreateServiceAccount(podName, namespace)
 	if err != nil {
 		return "", err
@@ -247,6 +273,17 @@ func (p provider) DestroySandbox(podName string,
 		log.Errorf("%s", err.Error())
 		return
 	}
+
+	for i, f := range p.preSandboxDestroy {
+		log.Debugf("Running pre destroy sandbox function: %v", i+1)
+		err := f(podName, namespace, targets)
+		if err != nil {
+			// Log the error and continue processing hooks. Expect hook to
+			// clean up after itself.
+			log.Warningf("pre destroy sandbox function failed with err: %v", err)
+		}
+	}
+
 	pod, err := k8scli.Client.CoreV1().Pods(namespace).Get(podName, metav1.GetOptions{})
 	if err != nil {
 		log.Errorf("Unable to retrieve pod - %v", err)
